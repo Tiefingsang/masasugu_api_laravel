@@ -3,8 +3,8 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -14,8 +14,8 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
 
+        // ✅ Le RateLimiter est défini ici
         then: function () {
-            // 👇 Définition du Rate Limiter ICI (et non dans un autre fichier)
             RateLimiter::for('api', function (Request $request) {
                 return Limit::perMinute(60)->by($request->ip());
             });

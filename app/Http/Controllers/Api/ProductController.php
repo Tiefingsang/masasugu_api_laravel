@@ -15,7 +15,7 @@ class ProductController extends Controller
     /**
      * Afficher tous les produits (liste publique ou filtrée)
      */
-    public function index(Request $request)
+    /* public function index(Request $request)
     {
         $query = Product::with(['company', 'user', 'images', 'category'])
             ->where('status', 'approved');
@@ -30,65 +30,104 @@ class ProductController extends Controller
 
         return response()->json($query->paginate(20));
     }
+ */
+public function index(Request $request)
+{
+    $query = Product::with(['company', 'user', 'images', 'category'])
+        ->where('status', 'approved');
 
+    if ($request->has('category_id')) {
+        $query->where('category_id', $request->category_id);
+    }
+
+    if ($request->has('company_id')) {
+        $query->where('company_id', $request->company_id);
+    }
+
+    $products = $query->paginate(20);
+
+    // 🔹 Ajouter l’URL complète de l’image
+    $products->getCollection()->transform(function ($product) {
+        $product->main_image_url = $product->main_image
+            ? asset('storage/' . $product->main_image)
+            : null;
+        return $product;
+    });
+
+    return response()->json($products);
+}
     /**
      * Créer un produit (par un vendeur authentifié)
      */
-    public function store(Request $request)
-    {
-        $request->validate([
-            'name'           => 'required|string|max:255',
-            'price'          => 'required|numeric|min:0',
-            'stock'          => 'required|integer|min:0',
-            'description'    => 'nullable|string',
-            'category_id'    => 'nullable|exists:categories,id',
-            'main_image'     => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
-        ]);
+    
+ public function store(Request $request)
+{
+    $user = $request->user(); // 🔹 récupère l'utilisateur connecté grâce au token
 
-        $user = Auth::user();
+    $request->validate([
+        'category_id' => 'required|exists:categories,id',
+        'name' => 'required|string|max:255',
+        'description' => 'nullable|string',
+        'price' => 'required|numeric|min:0',
+        'discount_price' => 'nullable|numeric|min:0',
+        'stock' => 'required|integer|min:0',
+        'brand' => 'nullable|string|max:100',
+        'main_image' => 'nullable|file|mimes:jpg,jpeg,png|',
+    ]);
 
-        // upload de l'image principale
-        $mainImagePath = null;
-        if ($request->hasFile('main_image')) {
-            $mainImagePath = $request->file('main_image')->store('products', 'public');
-        }
+    // 🔹 Création du slug unique
+    $slug = Str::slug($request->name) . '-' . Str::random(5);
 
-        $product = Product::create([
-            'user_id'        => $user->id,
-            'company_id'     => $user->company->id ?? null,
-            'name'           => $request->name,
-            'slug'           => Str::slug($request->name . '-' . Str::random(5)),
-            'price'          => $request->price,
-            'stock'          => $request->stock,
-            'description'    => $request->description,
-            'category_id'    => $request->category_id,
-            'main_image'     => $mainImagePath,
-            'status'         => 'pending', // un admin pourra l’approuver plus tard
-        ]);
+    $product = Product::create([
+        'user_id' => $user->id,
+        'company_id' => $user->company_id, // 🔹 auto-lié à la boutique du user
+        'category_id' => $request->category_id,
+        'name' => $request->name,
+        'slug' => $slug,
+        'sku' => strtoupper(Str::random(10)),
+        'description' => $request->description,
+        'price' => $request->price,
+        'discount_price' => $request->discount_price,
+        'currency' => $request->currency ?? 'XOF',
+        'stock' => $request->stock,
+        'is_available' => true,
+        'brand' => $request->brand,
+        'status' => 'approved',
+    ]);
 
-        // Images secondaires si besoin
-        if ($request->hasFile('images')) {
-            foreach ($request->file('images') as $file) {
-                $path = $file->store('products', 'public');
-                ProductImage::create([
-                    'product_id' => $product->id,
-                    'image_path' => $path,
-                ]);
-            }
-        }
-
-        return response()->json([
-            'message' => 'Produit ajouté avec succès et en attente de validation.',
-            'data' => $product->load('images'),
-        ], 201);
+    // 🔹 Si une image principale est envoyée
+    if ($request->hasFile('main_image')) {
+        $path = $request->file('main_image')->store('products/main', 'public');
+        $product->update(['main_image' => $path]);
     }
+
+    return response()->json([
+        'message' => '✅ Produit créé avec succès',
+        'product' => $product,
+    ], 201);
+}
+
+
+
+
+
 
     /**
      * Détails d’un produit
      */
-    public function show($id)
+    /* public function show($id)
     {
         $product = Product::with(['company', 'images', 'category'])->findOrFail($id);
+        return response()->json($product);
+    } */
+   public function show($id)
+    {
+        $product = Product::with(['company', 'images', 'category'])->findOrFail($id);
+
+        $product->main_image_url = $product->main_image
+            ? asset('storage/' . $product->main_image)
+            : null;
+
         return response()->json($product);
     }
 

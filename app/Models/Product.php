@@ -28,6 +28,7 @@ class Product extends Model
         'status',
         'meta_title',
         'meta_keywords',
+        'video',
         'meta_description',
     ];
 

@@ -9,19 +9,18 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up(): void
-    {
+    public function up(): void{
         Schema::create('products', function (Blueprint $table) {
             $table->id();
 
-            // Relation avec le vendeur ou l'entreprise
+            
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('company_id')->nullable()->constrained()->onDelete('cascade');
 
             // Informations produit
             $table->string('name');
             $table->string('slug')->unique();
-            $table->string('sku')->nullable(); // référence produit
+            $table->string('sku')->nullable(); 
             $table->text('description')->nullable();
             $table->text('specifications')->nullable();
 
@@ -42,6 +41,7 @@ return new class extends Migration
 
             // Médias
             $table->string('main_image')->nullable();
+            $table->string('video')->nullable();
 
             // Statut
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');

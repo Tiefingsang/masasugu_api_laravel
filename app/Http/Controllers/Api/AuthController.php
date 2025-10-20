@@ -61,4 +61,71 @@ class AuthController extends Controller
 
         return response()->json(['message' => 'Déconnexion réussie']);
     }
+
+    //profile update
+    public function updateProfile(Request $request){
+    $user = auth()->user();
+
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'avatar'=>'nullable|image|mimes:jpeg,png,jpg,gif',
+        'email' => 'required|email|unique:users,email,' . $user->id,
+        'phone' => 'nullable|string|max:20',
+        'country' => 'nullable|string|max:100',
+        'city' => 'nullable|string|max:100',
+        'address' => 'nullable|string|max:255',
+    ]);
+
+    $user->update($validated);
+
+    return response()->json([
+        'message' => 'Profil mis à jour avec succès',
+        'user' => $user,
+    ]);
+    }
+
+    //avatar update
+    /* public function updateAvatar(Request $request)
+{
+    $user = auth()->user();
+
+    if (!$request->hasFile('avatar')) {
+        return response()->json(['error' => 'Aucune image reçue'], 400);
+    }
+
+    $file = $request->file('avatar');
+    $filename = time() . '.' . $file->getClientOriginalExtension();
+    $path = $file->storeAs('avatars', $filename, 'public');
+
+    $user->avatar = '/storage/' . $path;
+    $user->save();
+
+    return response()->json([
+        'message' => 'Avatar mis à jour avec succès',
+        'avatar' => $user->avatar
+    ]);
+} */
+
+public function updateAvatar(Request $request)
+{
+    $user = $request->user();
+
+    if ($request->hasFile('avatar')) {
+        $file = $request->file('avatar');
+        $path = $file->store('avatars', 'public');
+
+        $user->avatar = $path;
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'avatar_url' => asset('storage/'.$path),
+        ]);
+    }
+
+    return response()->json(['error' => 'Aucune image reçue'], 400);
+}
+
+
+
 }
