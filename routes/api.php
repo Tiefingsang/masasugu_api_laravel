@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ShopController;
 use App\Http\Controllers\Api\ShopCategoryController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductCategoryController;
+use App\Http\Controllers\Api\ProductImageController;
 
 
 // Auth routes
@@ -53,6 +54,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // SHop categories routes
     //Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
     Route::post('/shop-categories', [ShopCategoryController::class, 'store']);
+
+    // Product images routes
+    Route::get('/products/{product}/images', [ProductImageController::class, 'index']);
+    Route::post('/product-images', [ProductImageController::class, 'store']);
+    Route::delete('/product-images/{id}', [ProductImageController::class, 'destroy']);
+
 
     
 
