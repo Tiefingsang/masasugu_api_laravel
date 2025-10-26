@@ -196,6 +196,23 @@ class ShopController extends Controller
         ]);
     }
 
+    // Mettre à jour le logo de la boutique
+    public function updateLogo(Request $request, $id)
+    {
+        $shop = Shop::findOrFail($id);
+
+        if ($request->hasFile('logo')) {
+            $path = $request->file('logo')->store('shops/logos', 'public');
+            $shop->logo = '/storage/' . $path;
+            $shop->save();
+
+            return response()->json(['message' => 'Logo mis à jour avec succès', 'logo' => $shop->logo], 200);
+        }
+
+        return response()->json(['message' => 'Aucun fichier reçu'], 400);
+    }
+
+
     // Supprimer une boutique
     public function destroy($id){
         $shop = Company::find($id);
@@ -205,5 +222,26 @@ class ShopController extends Controller
         $shop->delete();
         return response()->json(['message' => 'Boutique supprimée avec succès']);;
     }
+
+    // Récupérer la boutique par produit companyId
+    public function getShopByProduct($productId)
+    {
+        $product = \App\Models\Product::with('company')->find($productId);
+
+        if (!$product) {
+            return response()->json(['message' => 'Produit introuvable'], 404);
+        }
+
+        $shop = $product->company;
+
+        if ($shop) {
+            // Ajoute l’URL complète du logo
+            $shop->logo_url = $shop->logo ? asset('storage/' . $shop->logo) : null;
+        }
+
+        return response()->json(['shop' => $shop], 200);
+    }
+
+    
 
 }

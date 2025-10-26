@@ -73,4 +73,13 @@ class Company extends Model
     {
         return $query->where('is_active', true)->where('status', 'approved');
     }
+
+    /**
+     * Une boutique a plusieurs produits
+     */
+
+    public function products()
+    {
+        return $this->hasMany(Product::class);
+    }
 }

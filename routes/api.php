@@ -18,6 +18,8 @@ Route::get('/products/{id}', [ProductController::class, 'show']);
 
 Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
 
+
+
 // Product categories routes
 Route::get('/product-categories', [ProductCategoryController::class, 'index']);
 
@@ -36,6 +38,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{id}', [ProductController::class, 'update']);
     Route::delete('/products/{id}', [ProductController::class, 'destroy']);
+
+    // Video upload route
+    Route::post('/products/{id}/video', [ProductController::class, 'uploadVideo']);
+    // Product images upload route
+    //Route::post('/products/images', [ProductImageController::class, 'store']);
+
+
     
 
 
@@ -49,6 +58,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/shops/{id}', [ShopController::class, 'update']);
     Route::patch('/shops/{id}', [ShopController::class, 'update']);
     Route::delete('/shops/{id}', [ShopController::class, 'destroy']);
+    //recupérer shop par produit
+    Route::get('/shop-by-product/{productId}', [ShopController::class, 'getShopByProduct']);
+    Route::post('/shops/{id}/update-logo', [ShopController::class, 'updateLogo']);
+
+
+
 
 
     // SHop categories routes
@@ -57,7 +72,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Product images routes
     Route::get('/products/{product}/images', [ProductImageController::class, 'index']);
-    Route::post('/product-images', [ProductImageController::class, 'store']);
+    Route::post('/products-images', [ProductImageController::class, 'store']);
     Route::delete('/product-images/{id}', [ProductImageController::class, 'destroy']);
 
 

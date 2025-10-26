@@ -168,6 +168,35 @@ public function index(Request $request)
     }
 
     /**
+     * Télécharger une vidéo pour le produit
+     */
+    public function uploadVideo(Request $request, $id)
+    {
+        $request->validate([
+        'video' => 'nullable|file|mimetypes:video/mp4,video/x-msvideo,video/quicktime,video/x-matroska,video/webm,video/ogg|max:512000',
+    ]);
+
+
+    if ($request->hasFile('video')) {
+        $path = $request->file('video')->store('products/videos', 'public');
+
+        $product = Product::findOrFail($id);
+        $product->update(['video_path' => $path]);
+
+        return response()->json([
+            'message' => '✅ Vidéo uploadée avec succès',
+            'video_url' => asset('storage/' . $path),
+        ]);
+    }
+
+    return response()->json([
+        'message' => 'Aucune vidéo trouvée ou erreur lors de l’upload.'
+    ], 422);
+}
+
+
+
+    /**
      * Supprimer un produit
      */
     public function destroy($id)
