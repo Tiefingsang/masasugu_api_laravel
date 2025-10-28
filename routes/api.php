@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ShopCategoryController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductCategoryController;
 use App\Http\Controllers\Api\ProductImageController;
+use App\Http\Controllers\Api\CartController;
 
 
 // Auth routes
@@ -22,6 +23,9 @@ Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
 
 // Product categories routes
 Route::get('/product-categories', [ProductCategoryController::class, 'index']);
+Route::get('/products/by-shop/{company_id}', [ProductController::class, 'getProductsByShop']);
+
+
 
 
 
@@ -38,11 +42,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{id}', [ProductController::class, 'update']);
     Route::delete('/products/{id}', [ProductController::class, 'destroy']);
+    
 
     // Video upload route
     Route::post('/products/{id}/video', [ProductController::class, 'uploadVideo']);
+    //Route::get('/products/by-shop/{company_id}', [ProductController::class, 'getProductsByShop']);
     // Product images upload route
     //Route::post('/products/images', [ProductImageController::class, 'store']);
+
+    Route::get('/products/by-shop/{id}', [ProductController::class, 'getByShop']);
+    
 
 
     
@@ -74,6 +83,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/products/{product}/images', [ProductImageController::class, 'index']);
     Route::post('/products-images', [ProductImageController::class, 'store']);
     Route::delete('/product-images/{id}', [ProductImageController::class, 'destroy']);
+
+
+    // Cart routes
+    Route::post('/cart/add', [CartController::class, 'addToCart']);
+    Route::put('/cart/{id}', [CartController::class, 'updateQuantity']);
+    Route::delete('/cart/{id}', [CartController::class, 'removeItem']);
+    Route::get('/cart', [CartController::class, 'getUserCart']);
 
 
     

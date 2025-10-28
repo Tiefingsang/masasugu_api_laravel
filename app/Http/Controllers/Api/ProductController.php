@@ -134,65 +134,150 @@ public function index(Request $request)
     /**
      * Mise à jour du produit
      */
-    public function update(Request $request, $id)
-    {
-        $product = Product::findOrFail($id);
+     public function update(Request $request, $id)
+{
+    $product = Product::findOrFail($id);
 
-        if ($product->user_id !== Auth::id()) {
-            return response()->json(['error' => 'Non autorisé.'], 403);
-        }
-
-        $request->validate([
-            'name'        => 'sometimes|string|max:255',
-            'price'       => 'sometimes|numeric|min:0',
-            'stock'       => 'sometimes|integer|min:0',
-            'description' => 'nullable|string',
-            'main_image'  => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
-        ]);
-
-        if ($request->hasFile('main_image')) {
-            if ($product->main_image && Storage::disk('public')->exists($product->main_image)) {
-                Storage::disk('public')->delete($product->main_image);
-            }
-            $product->main_image = $request->file('main_image')->store('products', 'public');
-        }
-
-        $product->update($request->only([
-            'name', 'price', 'stock', 'description', 'category_id'
-        ]));
-
-        return response()->json([
-            'message' => 'Produit mis à jour avec succès.',
-            'data' => $product->fresh(),
-        ]);
+    // 🔒 Vérification d’autorisation
+    if ($product->user_id !== Auth::id()) {
+        return response()->json(['error' => 'Non autorisé.'], 403);
     }
+
+    // ✅ Validation unique (pas besoin de deux appels)
+    $validated = $request->validate([
+        'name'            => 'required|string|max:255',
+        'description'     => 'nullable|string',
+        'price'           => 'required|numeric|min:0',
+        'stock'           => 'required|integer|min:0',
+        'brand'           => 'nullable|string|max:255',
+        'discount_price'  => 'nullable|numeric|min:0',
+        'category_id'     => 'required|integer|exists:categories,id',
+        'main_image'      => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+    ]);
+
+    // ✅ Gestion de la nouvelle image principale
+    if ($request->hasFile('main_image')) {
+        // Suppression de l’ancienne image
+        if ($product->main_image && Storage::disk('public')->exists($product->main_image)) {
+            Storage::disk('public')->delete($product->main_image);
+        }
+
+        // Enregistrement de la nouvelle image
+        $path = $request->file('main_image')->store('products', 'public');
+        $validated['main_image'] = $path;
+    }
+
+    // ✅ Mise à jour du produit
+    $product->update($validated);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Produit mis à jour avec succès.',
+        'product' => $product->fresh(), // renvoie les données actualisées
+    ], 200);
+}
 
     /**
      * Télécharger une vidéo pour le produit
      */
-    public function uploadVideo(Request $request, $id)
-    {
-        $request->validate([
-        'video' => 'nullable|file|mimetypes:video/mp4,video/x-msvideo,video/quicktime,video/x-matroska,video/webm,video/ogg|max:512000',
+    public function uploadVideo(Request $request, $id){
+            $request->validate([
+            'video' => 'nullable|file|mimetypes:video/mp4,video/x-msvideo,video/quicktime,video/x-matroska,video/webm,video/ogg|max:512000',
+        ]);
+
+
+        if ($request->hasFile('video')) {
+            $path = $request->file('video')->store('products/videos', 'public');
+
+            $product = Product::findOrFail($id);
+            $product->update(['video_path' => $path]);
+
+            return response()->json([
+                'message' => '✅ Vidéo uploadée avec succès',
+                'video_url' => asset('storage/' . $path),
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Aucune vidéo trouvée ou erreur lors de l’upload.'
+        ], 422);
+    }
+
+    /**
+     * Récupérer les produits par boutique
+     */
+
+    public function getProductsByShop($company_id)
+{
+    $products = Product::where('company_id', $company_id)
+        ->where('status', 'approved')
+        ->with('images') // 👈 charge les images liées
+        ->orderBy('created_at', 'desc')
+        ->get();
+
+    // 🔁 Transforme les chemins pour inclure l’URL complète
+    $products->transform(function ($product) {
+        // Image principale
+        if ($product->main_image && !str_starts_with($product->main_image, 'http')) {
+            $product->main_image = asset('storage/' . $product->main_image);
+        }
+
+        // Images secondaires
+        if ($product->images && count($product->images) > 0) {
+            foreach ($product->images as $image) {
+                if ($image->image_path && !str_starts_with($image->image_path, 'http')) {
+                    $image->image_path = asset('storage/' . $image->image_path);
+                }
+            }
+        }
+
+        return $product;
+    });
+
+    return response()->json([
+        'data' => $products
     ]);
 
 
-    if ($request->hasFile('video')) {
-        $path = $request->file('video')->store('products/videos', 'public');
+}
 
-        $product = Product::findOrFail($id);
-        $product->update(['video_path' => $path]);
+    /* public function update(Request $request, $id)
+{
+    $product = Product::findOrFail($id);
 
-        return response()->json([
-            'message' => '✅ Vidéo uploadée avec succès',
-            'video_url' => asset('storage/' . $path),
-        ]);
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'description' => 'nullable|string',
+        'price' => 'required|numeric',
+        'stock' => 'required|integer',
+        'brand' => 'nullable|string|max:255',
+        'discount_price' => 'nullable|numeric',
+        'category_id' => 'required|integer',
+        'main_image' => 'nullable|image|mimes:jpeg,png,jpg',
+    ]);
+
+    // ✅ Gestion image principale
+    if ($request->hasFile('main_image')) {
+        if ($product->main_image && file_exists(storage_path('app/public/' . $product->main_image))) {
+            unlink(storage_path('app/public/' . $product->main_image));
+        }
+        $path = $request->file('main_image')->store('products', 'public');
+        $validated['main_image'] = $path;
     }
 
+    $product->update($validated);
+
     return response()->json([
-        'message' => 'Aucune vidéo trouvée ou erreur lors de l’upload.'
-    ], 422);
-}
+        'success' => true,
+        'message' => 'Produit mis à jour avec succès.',
+        'product' => $product
+    ]);
+} */
+
+
+
+
+
 
 
 
