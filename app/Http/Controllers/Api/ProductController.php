@@ -31,81 +31,90 @@ class ProductController extends Controller
         return response()->json($query->paginate(20));
     }
  */
-public function index(Request $request)
-{
-    $query = Product::with(['company', 'user', 'images', 'category'])
-        ->where('status', 'approved');
+    public function search(Request $request){
+        $query = $request->query('q');
+        $produits = Product::where(
+            'name', 'like', "%{$query}%"
+            
+            )->get();
 
-    if ($request->has('category_id')) {
-        $query->where('category_id', $request->category_id);
+
+        return response()->json(['produits' => $produits]);
     }
 
-    if ($request->has('company_id')) {
-        $query->where('company_id', $request->company_id);
+    public function index(Request $request){
+        $query = Product::with(['company', 'user', 'images', 'category'])
+            ->where('status', 'approved');
+
+        if ($request->has('category_id')) {
+            $query->where('category_id', $request->category_id);
+        }
+
+        if ($request->has('company_id')) {
+            $query->where('company_id', $request->company_id);
+        }
+
+        $products = $query->paginate(20);
+
+        // 🔹 Ajouter l’URL complète de l’image
+        $products->getCollection()->transform(function ($product) {
+            $product->main_image_url = $product->main_image
+                ? asset('storage/' . $product->main_image)
+                : null;
+            return $product;
+        });
+
+        return response()->json($products);
     }
-
-    $products = $query->paginate(20);
-
-    // 🔹 Ajouter l’URL complète de l’image
-    $products->getCollection()->transform(function ($product) {
-        $product->main_image_url = $product->main_image
-            ? asset('storage/' . $product->main_image)
-            : null;
-        return $product;
-    });
-
-    return response()->json($products);
-}
     /**
      * Créer un produit (par un vendeur authentifié)
      */
     
- public function store(Request $request)
-{
-    $user = $request->user(); // 🔹 récupère l'utilisateur connecté grâce au token
+    public function store(Request $request){
+        $user = $request->user(); // 🔹 récupère l'utilisateur connecté grâce au token
 
-    $request->validate([
-        'category_id' => 'required|exists:categories,id',
-        'name' => 'required|string|max:255',
-        'description' => 'nullable|string',
-        'price' => 'required|numeric|min:0',
-        'discount_price' => 'nullable|numeric|min:0',
-        'stock' => 'required|integer|min:0',
-        'brand' => 'nullable|string|max:100',
-        'main_image' => 'nullable|file|mimes:jpg,jpeg,png|',
-    ]);
+        $request->validate([
+            'category_id' => 'required|exists:categories,id',
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'price' => 'required|numeric|min:0',
+            'discount_price' => 'nullable|numeric|min:0',
+            'stock' => 'required|integer|min:0',
+            'brand' => 'nullable|string|max:100',
+            'main_image' => 'nullable|file|mimes:jpg,jpeg,png|',
+        ]);
 
-    // 🔹 Création du slug unique
-    $slug = Str::slug($request->name) . '-' . Str::random(5);
+        // 🔹 Création du slug unique
+        $slug = Str::slug($request->name) . '-' . Str::random(5);
 
-    $product = Product::create([
-        'user_id' => $user->id,
-        'company_id' => $user->company_id, // 🔹 auto-lié à la boutique du user
-        'category_id' => $request->category_id,
-        'name' => $request->name,
-        'slug' => $slug,
-        'sku' => strtoupper(Str::random(10)),
-        'description' => $request->description,
-        'price' => $request->price,
-        'discount_price' => $request->discount_price,
-        'currency' => $request->currency ?? 'XOF',
-        'stock' => $request->stock,
-        'is_available' => true,
-        'brand' => $request->brand,
-        'status' => 'approved',
-    ]);
+        $product = Product::create([
+            'user_id' => $user->id,
+            'company_id' => $user->company_id, // 🔹 auto-lié à la boutique du user
+            'category_id' => $request->category_id,
+            'name' => $request->name,
+            'slug' => $slug,
+            'sku' => strtoupper(Str::random(10)),
+            'description' => $request->description,
+            'price' => $request->price,
+            'discount_price' => $request->discount_price,
+            'currency' => $request->currency ?? 'XOF',
+            'stock' => $request->stock,
+            'is_available' => true,
+            'brand' => $request->brand,
+            'status' => 'approved',
+        ]);
 
-    // 🔹 Si une image principale est envoyée
-    if ($request->hasFile('main_image')) {
-        $path = $request->file('main_image')->store('products/main', 'public');
-        $product->update(['main_image' => $path]);
+        // 🔹 Si une image principale est envoyée
+        if ($request->hasFile('main_image')) {
+            $path = $request->file('main_image')->store('products/main', 'public');
+            $product->update(['main_image' => $path]);
+        }
+
+        return response()->json([
+            'message' => '✅ Produit créé avec succès',
+            'product' => $product,
+        ], 201);
     }
-
-    return response()->json([
-        'message' => '✅ Produit créé avec succès',
-        'product' => $product,
-    ], 201);
-}
 
 
 
@@ -120,8 +129,7 @@ public function index(Request $request)
         $product = Product::with(['company', 'images', 'category'])->findOrFail($id);
         return response()->json($product);
     } */
-   public function show($id)
-    {
+   public function show($id){
         $product = Product::with(['company', 'images', 'category'])->findOrFail($id);
 
         $product->main_image_url = $product->main_image
@@ -134,8 +142,7 @@ public function index(Request $request)
     /**
      * Mise à jour du produit
      */
-     public function update(Request $request, $id)
-{
+     public function update(Request $request, $id){
     $product = Product::findOrFail($id);
 
     // 🔒 Vérification d’autorisation

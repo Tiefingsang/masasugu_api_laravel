@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductCategoryController;
 use App\Http\Controllers\Api\ProductImageController;
 use App\Http\Controllers\Api\CartController;
+use App\Http\Controllers\Api\OrderController;
 
 
 // Auth routes
@@ -18,6 +19,8 @@ Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{id}', [ProductController::class, 'show']);
 
 Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
+
+Route::get('/produits/search', [ProductController::class, 'search']);
 
 
 
@@ -51,6 +54,9 @@ Route::middleware('auth:sanctum')->group(function () {
     //Route::post('/products/images', [ProductImageController::class, 'store']);
 
     Route::get('/products/by-shop/{id}', [ProductController::class, 'getByShop']);
+    // Search products route
+
+
     
 
 
@@ -87,9 +93,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Cart routes
     Route::post('/cart/add', [CartController::class, 'addToCart']);
-    Route::put('/cart/{id}', [CartController::class, 'updateQuantity']);
-    Route::delete('/cart/{id}', [CartController::class, 'removeItem']);
+    Route::put('/cart/update/{id}', [CartController::class, 'updateQuantity']);
+    Route::delete('/cart/remove/{id}', [CartController::class, 'removeItem']);
     Route::get('/cart', [CartController::class, 'getUserCart']);
+
+    // Route to get the total count of items in the cart
+    Route::get('/cart/count', [CartController::class, 'count']);
+
+
+    Route::post('/orders', [OrderController::class, 'store']);
 
 
     
