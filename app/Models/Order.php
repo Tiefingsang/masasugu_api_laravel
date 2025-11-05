@@ -10,9 +10,11 @@ class Order extends Model{
 
     protected $fillable = [
         'user_id',
+        'company_id',
         'total',
         'status',
         'payment_method',
+
     ];
 
     /**
@@ -24,10 +26,29 @@ class Order extends Model{
     }
 
     /**
-     * 🔗 Relation : une commande a plusieurs articles
+     *  Relation : une commande a plusieurs articles
      */
     public function items()
     {
         return $this->hasMany(OrderItem::class);
     }
+    // Relation : un article de commande appartient à un produit
+
+    public function product(){
+        return $this->belongsTo(Product::class);
+    }
+
+    public function shop(){
+        return $this->belongsTo(Compagny::class, 'company_id'); 
+    }
+
+    public function company()
+{
+    return $this->belongsTo(Company::class);
+}
+
+
+    
+
+
 }

@@ -76,6 +76,9 @@ Route::middleware('auth:sanctum')->group(function () {
     //recupérer shop par produit
     Route::get('/shop-by-product/{productId}', [ShopController::class, 'getShopByProduct']);
     Route::post('/shops/{id}/update-logo', [ShopController::class, 'updateLogo']);
+    // Récupérer les statistiques d'une boutique
+    Route::get('/shops/{id}/stats', [ShopController::class, 'getShopStats']);
+
 
 
 
@@ -102,6 +105,19 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
     Route::post('/orders', [OrderController::class, 'store']);
+    Route::get('/orders/user', [OrderController::class, 'index']);
+
+    // Récupérer les commandes pour un magasin spécifique
+    Route::get('/companies/{company}/orders', [OrderController::class, 'getShopOrders']);
+    
+    // Mettre à jour le statut d'une commande
+    Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus']);
+
+    
+
+    
+
+
 
 
     

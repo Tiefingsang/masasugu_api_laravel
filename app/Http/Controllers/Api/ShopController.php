@@ -5,6 +5,8 @@ use App\Http\Controllers\Controller;
 
 use App\Models\Company;
 use App\Models\Category;
+use App\Models\Product;
+use App\Models\Order;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -241,6 +243,42 @@ class ShopController extends Controller
 
         return response()->json(['shop' => $shop], 200);
     }
+
+
+    public function getShopStats($shopId)
+{
+    // 1️⃣ Récupérer la boutique
+    $shop = Company::findOrFail($shopId);
+
+    // 2️⃣ Compter le nombre de produits de cette boutique
+    $productsCount = Product::where('company_id', $shopId)->count();
+
+    // 3️⃣ Compter le nombre total de commandes liées à cette boutique
+    $ordersCount = Order::where('company_id', $shopId)->count();
+
+    // 4️⃣ Compter le nombre de clients distincts (chaque client peut avoir plusieurs commandes)
+    $clientsCount = Order::where('company_id', $shopId)
+        ->distinct('user_id')
+        ->count('user_id');
+
+    // 5️⃣ Calculer le total des ventes (seulement pour les commandes livrées)
+    $salesTotal = Order::where('company_id', $shopId)
+        ->where('status', 'livree')
+        ->sum('total');
+
+    // 6️⃣ Retourner les stats
+    return response()->json([
+    'stats' => [
+        'products' => $productsCount,
+        'orders'   => $ordersCount,
+        'clients'  => $clientsCount,
+        'sales'    => $salesTotal,
+    ],
+]);
+}
+
+
+
 
     
 

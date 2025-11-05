@@ -82,4 +82,14 @@ class Company extends Model
     {
         return $this->hasMany(Product::class);
     }
+
+    /**
+     * Une boutique a plusieurs commandes
+     */
+
+    public function orders()
+    {
+        return $this->hasMany(Order::class);
+    }
+
 }
