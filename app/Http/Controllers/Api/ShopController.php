@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
 
 class ShopController extends Controller
 {
@@ -244,42 +245,62 @@ class ShopController extends Controller
         return response()->json(['shop' => $shop], 200);
     }
 
-
-    public function getShopStats($shopId)
-{
-    // 1️⃣ Récupérer la boutique
-    $shop = Company::findOrFail($shopId);
-
-    // 2️⃣ Compter le nombre de produits de cette boutique
-    $productsCount = Product::where('company_id', $shopId)->count();
-
-    // 3️⃣ Compter le nombre total de commandes liées à cette boutique
-    $ordersCount = Order::where('company_id', $shopId)->count();
-
-    // 4️⃣ Compter le nombre de clients distincts (chaque client peut avoir plusieurs commandes)
-    $clientsCount = Order::where('company_id', $shopId)
-        ->distinct('user_id')
-        ->count('user_id');
-
-    // 5️⃣ Calculer le total des ventes (seulement pour les commandes livrées)
-    $salesTotal = Order::where('company_id', $shopId)
-        ->where('status', 'livree')
-        ->sum('total');
-
-    // 6️⃣ Retourner les stats
-    return response()->json([
-    'stats' => [
-        'products' => $productsCount,
-        'orders'   => $ordersCount,
-        'clients'  => $clientsCount,
-        'sales'    => $salesTotal,
-    ],
-]);
-}
+    // Récupérer les statistiques d’une boutique
 
 
+    public function getShopStats($companyId){
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Non authentifié'], 401);
+        }
+
+        // Nombre de produits appartenant à cette entreprise
+        $productsCount = Product::where('company_id', $companyId)->count();
+
+        // Commandes associées à cette entreprise
+        $orders = Order::whereHas('items.product', function ($q) use ($companyId) {
+            $q->where('company_id', $companyId);
+        })->get();
+
+        // Nombre de commandes
+        $ordersCount = $orders->count();
+
+        // Somme totale des ventes
+        $totalSales = $orders->sum('total');
+
+        // Nombre de clients uniques
+        $clientsCount = $orders->pluck('user_id')->unique()->count();
+
+        return response()->json([
+            'products' => $productsCount,
+            'orders' => $ordersCount,
+            'sales' => $totalSales,
+            'clients' => $clientsCount,
+        ]);
+    }
+
+    // Récupérer les produits récents et les best-sellers d’une boutique
 
 
-    
+    public function getShopProducts($shopId){
+        $recentProducts = Product::where('company_id', $shopId)
+            ->latest()
+            ->take(5)
+            ->get();
+
+        $bestSellers = Product::where('company_id', $shopId)
+            ->withCount('orderItems')
+            ->orderBy('order_items_count', 'desc')
+            ->take(5)
+            ->get();
+
+        return response()->json([
+            'recent' => $recentProducts,
+            'best_sellers' => $bestSellers,
+        ]);
+    }
+
+
+
 
 }

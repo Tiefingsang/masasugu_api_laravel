@@ -313,4 +313,53 @@ class ProductController extends Controller
 
         return response()->json(['message' => 'Produit supprimé avec succès.']);
     }
+
+    public function bestOffers(){
+        $products = Product::whereNotNull('discount_price')
+            ->where('discount_price', '>', 0)
+            ->orderByRaw("(price - discount_price) DESC") 
+            ->take(20)
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'data' => $products
+        ]);
+    }
+
+    //Récupérer les produits les mieux notés
+    
+
+
+
+    public function topRated()
+{
+    $products = Product::orderBy('rating', 'desc')   
+                       ->orderBy('views', 'desc')   
+                       ->orderBy('sales_count', 'desc') 
+                       ->orderBy('likes', 'desc')    
+                       ->take(20)
+                       ->get();
+
+    return response()->json([
+        'status' => true,
+        'data' => $products
+    ]);
+}
+
+
+
+
+    public function newProducts()
+    {
+        $products = Product::orderBy('created_at', 'desc')
+            ->take(20)
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'data' => $products
+        ]);
+    }
+
 }

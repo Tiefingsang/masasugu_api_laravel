@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ProductCategoryController;
 use App\Http\Controllers\Api\ProductImageController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\ChatController;
 
 
 // Auth routes
@@ -16,6 +17,11 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
 Route::get('/products', [ProductController::class, 'index']);
+
+Route::get('/products/best-offers', [ProductController::class, 'bestOffers']);
+Route::get('/products/top-rated', [ProductController::class, 'topRated']);
+Route::get('/products/new', [ProductController::class, 'newProducts']);
+
 Route::get('/products/{id}', [ProductController::class, 'show']);
 
 Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
@@ -26,7 +32,18 @@ Route::get('/produits/search', [ProductController::class, 'search']);
 
 // Product categories routes
 Route::get('/product-categories', [ProductCategoryController::class, 'index']);
+Route::get('/categories', [ProductCategoryController::class, 'getCategory']);
+Route::get('/categories/{id}/products', [ProductCategoryController::class, 'getProductsByCategory']);
+
+
+
 Route::get('/products/by-shop/{company_id}', [ProductController::class, 'getProductsByShop']);
+
+// Routes spécifiques
+
+
+
+
 
 
 
@@ -45,6 +62,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{id}', [ProductController::class, 'update']);
     Route::delete('/products/{id}', [ProductController::class, 'destroy']);
+
+    
+
     
 
     // Video upload route
@@ -77,7 +97,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/shop-by-product/{productId}', [ShopController::class, 'getShopByProduct']);
     Route::post('/shops/{id}/update-logo', [ShopController::class, 'updateLogo']);
     // Récupérer les statistiques d'une boutique
-    Route::get('/shops/{id}/stats', [ShopController::class, 'getShopStats']);
+    Route::get('/companies/{id}/stats', [ShopController::class, 'getShopStats']);
+    Route::get('/companies/{id}/products/overview', [ShopController::class, 'getShopProducts']);
+
 
 
 
@@ -112,6 +134,18 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Mettre à jour le statut d'une commande
     Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus']);
+
+
+
+    // Chat routes
+    Route::get('/conversations', [ChatController::class,'index']);
+    Route::get('/conversations/{id}/messages', [ChatController::class,'messages']);
+    Route::post('/messages/send', [ChatController::class,'send']);
+
+
+
+    
+
 
     
 

@@ -30,6 +30,10 @@ class Product extends Model
         'meta_keywords',
         'video',
         'meta_description',
+        'rating',
+        'views',
+        'sales_count',
+        'likes',
     ];
 
     // Relations
@@ -52,5 +56,10 @@ class Product extends Model
     {
         return $this->hasMany(ProductImage::class);
     }
+
+    public function orderItems(){
+        return $this->hasMany(OrderItem::class);
+    }
+
     
 }
