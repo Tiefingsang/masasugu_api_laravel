@@ -57,12 +57,26 @@ class ProductController extends Controller
         $products = $query->paginate(20);
 
         // 🔹 Ajouter l’URL complète de l’image
-        $products->getCollection()->transform(function ($product) {
+        /* $products->getCollection()->transform(function ($product) {
             $product->main_image_url = $product->main_image
                 ? asset('storage/' . $product->main_image)
                 : null;
             return $product;
-        });
+        }); */
+        $products->getCollection()->transform(function ($product) {
+    $product->main_image_url = $product->main_image
+        ? asset('storage/' . $product->main_image)
+        : null;
+
+    // Téléphone vendeur : priorité à la company, sinon user
+    $product->vendor_phone =
+        ($product->company->phone ?? null)
+        ?: ($product->user->phone ?? null);
+
+    return $product;
+});
+
+
 
         return response()->json($products);
     }
@@ -130,7 +144,7 @@ class ProductController extends Controller
         return response()->json($product);
     } */
    public function show($id){
-        $product = Product::with(['company', 'images', 'category'])->findOrFail($id);
+        $product = Product::with(['company', 'images', 'category',])->findOrFail($id);
 
         $product->main_image_url = $product->main_image
             ? asset('storage/' . $product->main_image)
@@ -333,19 +347,49 @@ class ProductController extends Controller
 
 
     public function topRated()
-{
-    $products = Product::orderBy('rating', 'desc')   
-                       ->orderBy('views', 'desc')   
-                       ->orderBy('sales_count', 'desc') 
-                       ->orderBy('likes', 'desc')    
-                       ->take(20)
-                       ->get();
+    {
+        $products = Product::orderBy('rating', 'desc')   
+                        ->orderBy('views', 'desc')   
+                        ->orderBy('sales_count', 'desc') 
+                        ->orderBy('likes', 'desc')    
+                        ->take(20)
+                        ->get();
 
-    return response()->json([
-        'status' => true,
-        'data' => $products
+        return response()->json([
+            'status' => true,
+            'data' => $products
+        ]);
+    }
+
+    public function addToRecent($id)
+{
+    $user = auth()->user();
+
+    $user->recentProducts()->syncWithoutDetaching([$id]);
+
+    Log::info("Produit ajouté au récent", [
+        'user_id' => $user->id,
+        'product_id' => $id
     ]);
+
+    return response()->json(['message' => 'Added']);
 }
+
+
+public function recents()
+{
+    $user = auth()->user();
+    $recents = $user->recentProducts()->latest()->take(10)->get();
+
+    Log::info("Produits récents récupérés", [
+        'user_id' => $user->id,
+        'count' => $recents->count(),
+    ]);
+
+    return response()->json($recents);
+}
+
+
 
 
 

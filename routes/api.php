@@ -21,6 +21,8 @@ Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/best-offers', [ProductController::class, 'bestOffers']);
 Route::get('/products/top-rated', [ProductController::class, 'topRated']);
 Route::get('/products/new', [ProductController::class, 'newProducts']);
+Route::get('/produits/recents', [ProductController::class, 'recents']);
+
 
 Route::get('/products/{id}', [ProductController::class, 'show']);
 
