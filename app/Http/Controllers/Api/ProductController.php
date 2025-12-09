@@ -64,14 +64,18 @@ class ProductController extends Controller
             return $product;
         }); */
         $products->getCollection()->transform(function ($product) {
-    $product->main_image_url = $product->main_image
-        ? asset('storage/' . $product->main_image)
-        : null;
+            $product->main_image_url = $product->main_image
+            ? asset('storage/' . $product->main_image)
+            : null;
 
-    // Téléphone vendeur : priorité à la company, sinon user
-    $product->vendor_phone =
-        ($product->company->phone ?? null)
-        ?: ($product->user->phone ?? null);
+        // Téléphone vendeur : priorité à la company, sinon user
+            $product->vendor_phone =
+                ($product->company->phone ?? null)
+                ?: ($product->user->phone ?? null);
+
+            $product->is_liked = $product->likes()
+                ->where('user_id', auth()->id())
+                ->exists();
 
     return $product;
 });
@@ -85,7 +89,7 @@ class ProductController extends Controller
      */
     
     public function store(Request $request){
-        $user = $request->user(); // 🔹 récupère l'utilisateur connecté grâce au token
+        $user = $request->user(); 
 
         $request->validate([
             'category_id' => 'required|exists:categories,id',
@@ -232,11 +236,11 @@ class ProductController extends Controller
 {
     $products = Product::where('company_id', $company_id)
         ->where('status', 'approved')
-        ->with('images') // 👈 charge les images liées
+        ->with('images') 
         ->orderBy('created_at', 'desc')
         ->get();
 
-    // 🔁 Transforme les chemins pour inclure l’URL complète
+    
     $products->transform(function ($product) {
         // Image principale
         if ($product->main_image && !str_starts_with($product->main_image, 'http')) {
@@ -405,5 +409,61 @@ public function recents()
             'data' => $products
         ]);
     }
+
+    public function toggleLike($id)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $product = Product::findOrFail($id);
+
+        // Vérifier si déjà liké
+        $alreadyLiked = $product->likes()->where('user_id', $user->id)->exists();
+
+        if ($alreadyLiked) {
+            // Supprimer like
+            $product->likes()->where('user_id', $user->id)->delete();
+            $liked = false;
+        } else {
+            // Ajouter like
+            $product->likes()->create(['user_id' => $user->id]);
+            $liked = true;
+        }
+
+        return response()->json([
+            'liked' => $liked,
+            'likes' => $product->likes()->count(),
+        ]);
+    }
+
+
+
+    public function rateProduct(Request $request, $id){
+        $request->validate([
+            'rating' => 'required|numeric|min:1|max:5'
+        ]);
+
+        $product = Product::findOrFail($id);
+        $user = auth()->user();
+
+        // Mise à jour ou création d'une note
+        $product->ratings()->updateOrCreate(
+            ['user_id' => $user->id],
+            ['rating' => $request->rating]
+        );
+
+        // Recalculer la note moyenne
+        $average = $product->ratings()->avg('rating');
+        $product->update(['rating' => $average]);
+
+        return response()->json([
+            'success' => true,
+            'rating' => $average
+        ]);
+    }
+
+
 
 }

@@ -61,5 +61,23 @@ class Product extends Model
         return $this->hasMany(OrderItem::class);
     }
 
+    public function likes()
+    {
+        return $this->hasMany(ProductLike::class);
+    }
+
+    public function isLikedByUser($userId)
+    {
+        return $this->likes()->where('user_id', $userId)->exists();
+    }
+
+    public function ratings()
+    {
+        return $this->hasMany(ProductRating::class);
+    }
+
+
+
+
     
 }

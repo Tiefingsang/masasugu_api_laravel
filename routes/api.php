@@ -22,6 +22,7 @@ Route::get('/products/best-offers', [ProductController::class, 'bestOffers']);
 Route::get('/products/top-rated', [ProductController::class, 'topRated']);
 Route::get('/products/new', [ProductController::class, 'newProducts']);
 Route::get('/produits/recents', [ProductController::class, 'recents']);
+Route::post('/products/{id}/rate', [ProductController::class, 'rateProduct']);
 
 
 Route::get('/products/{id}', [ProductController::class, 'show']);
@@ -29,7 +30,6 @@ Route::get('/products/{id}', [ProductController::class, 'show']);
 Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
 
 Route::get('/produits/search', [ProductController::class, 'search']);
-
 
 
 // Product categories routes
@@ -64,6 +64,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{id}', [ProductController::class, 'update']);
     Route::delete('/products/{id}', [ProductController::class, 'destroy']);
+
+    Route::post('/products/{id}/like', [ProductController::class, 'toggleLike']);
+    Route::post('/products/{id}/rate', [ProductController::class, 'rateProduct']);
 
     
 
