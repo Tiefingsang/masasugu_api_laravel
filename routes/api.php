@@ -30,6 +30,7 @@ Route::get('/products/{id}', [ProductController::class, 'show']);
 Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
 
 Route::get('/produits/search', [ProductController::class, 'search']);
+Route::post('/search-by-image', [ProductController::class, 'searchByImage']);
 
 
 // Product categories routes

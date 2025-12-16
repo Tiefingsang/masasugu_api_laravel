@@ -121,6 +121,15 @@ class OrderController extends Controller
             'payment_method' => $request->payment_method,
         ]);
 
+        $notif = Notification::create([
+        'vendor_id' => $request->vendor_id,
+        'type' => 'order',
+        'message' => 'Nouvelle commande reçue',
+        'data' => ['order_id' => $order->id],
+        ]);
+
+        broadcast(new OrderCreated($notif))->toOthers();
+
         // 🔹 Enregistrement des items
         foreach ($request->items as $item) {
             $product = Product::find($item['product_id']);

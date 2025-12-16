@@ -42,6 +42,30 @@ class ProductController extends Controller
         return response()->json(['produits' => $produits]);
     }
 
+    
+
+
+    public function searchByImage(Request $request){
+        $image = $request->file('image');
+
+        
+        $labels = GoogleVision::detectLabels($image);
+
+        
+        $keywords = collect($labels)->pluck('description');
+
+        
+        $products = Product::where(function ($q) use ($keywords) {
+            foreach ($keywords as $word) {
+                $q->orWhere('name', 'LIKE', "%$word%");
+            }
+        })->get();
+
+        return response()->json($products);
+    }
+
+
+
     public function index(Request $request){
         $query = Product::with(['company', 'user', 'images', 'category'])
             ->where('status', 'approved');
@@ -73,10 +97,15 @@ class ProductController extends Controller
                 ($product->company->phone ?? null)
                 ?: ($product->user->phone ?? null);
 
+             $product->likes_list = $product->likes;
+
+            // envoyer juste le nombre dans likes
+            $product->likes = $product->likes()->count();
+
+            // savoir si l’utilisateur a liké
             $product->is_liked = $product->likes()
                 ->where('user_id', auth()->id())
                 ->exists();
-
     return $product;
 });
 
@@ -148,11 +177,24 @@ class ProductController extends Controller
         return response()->json($product);
     } */
    public function show($id){
-        $product = Product::with(['company', 'images', 'category',])->findOrFail($id);
+        $product = Product::with(['company', 'images', 'category','likes'])->findOrFail($id);
 
         $product->main_image_url = $product->main_image
             ? asset('storage/' . $product->main_image)
             : null;
+
+        $product->loadCount('likes');
+
+// Renommer la liste
+$product->likes_list = $product->likes; // liste complète
+
+// Ajouter juste le nombre
+$product->likes = $product->likes_count;
+
+// Si user a liké
+$product->is_liked = $product->likes_list
+    ->where('user_id', auth()->id())
+    ->count() > 0;
 
         return response()->json($product);
     }
