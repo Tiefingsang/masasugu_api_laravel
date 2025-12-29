@@ -42,27 +42,66 @@ class ProductController extends Controller
         return response()->json(['produits' => $produits]);
     }
 
+    private function normalizeKeywords(array $keywords): array
+{
+    $map = [
+        'shirt' => ['tshirt', 't-shirt', 'chemise', 'haut'],
+        'clothing' => ['vetement', 'vêtements', 'habit'],
+        'shoe' => ['chaussure', 'basket', 'sneaker'],
+        'phone' => ['telephone', 'smartphone', 'mobile'],
+        'laptop' => ['ordinateur', 'pc'],
+    ];
+
+    $final = [];
+
+    foreach ($keywords as $word) {
+        $final[] = $word;
+
+        if (isset($map[$word])) {
+            $final = array_merge($final, $map[$word]);
+        }
+    }
+
+    return array_unique($final);
+}
+
+
     
 
 
-    public function searchByImage(Request $request){
-        $image = $request->file('image');
+   public function searchByKeywords(Request $request)
+{
+    
+    $keywords = $request->input('keywords', []);
+    $keywords = array_map('strtolower', $keywords);
+    $keywords = $this->normalizeKeywords($keywords);
 
-        
-        $labels = GoogleVision::detectLabels($image);
-
-        
-        $keywords = collect($labels)->pluck('description');
-
-        
-        $products = Product::where(function ($q) use ($keywords) {
-            foreach ($keywords as $word) {
-                $q->orWhere('name', 'LIKE', "%$word%");
-            }
-        })->get();
-
-        return response()->json($products);
+    if (!is_array($keywords) || empty($keywords)) {
+        return response()->json([
+            'data' => [],
+            'message' => 'No keywords provided'
+        ]);
     }
+
+    $query = Product::with(['category', 'images'])
+        ->where('status', 'approved')
+        ->where(function ($q) use ($keywords) {
+            foreach ($keywords as $word) {
+                $word = strtolower($word);
+
+                $q->orWhereRaw('LOWER(name) LIKE ?', ["%{$word}%"])
+                  ->orWhereRaw('LOWER(description) LIKE ?', ["%{$word}%"])
+                  ->orWhereHas('category', function ($cat) use ($word) {
+                      $cat->whereRaw('LOWER(name) LIKE ?', ["%{$word}%"]);
+                  });
+            }
+        });
+
+    return response()->json([
+        'data' => $query->limit(20)->get()
+    ]);
+}
+
 
 
 

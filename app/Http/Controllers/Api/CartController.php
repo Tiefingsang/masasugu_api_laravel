@@ -7,9 +7,18 @@ use Illuminate\Http\Request;
 use App\Models\Cart;
 use App\Models\Product;
 use Illuminate\Support\Facades\Auth;
+//use App\Events\ProductAddedToCart;
+use App\Notifications\ProductAddedToCartNotification;
+//use Illuminate\Notifications\Messages\BroadcastMessage;
+use App\Models\User;
+
+
+
 
 class CartController extends Controller
 {
+
+    
     // Ajouter un produit au panier
     public function addToCart(Request $request){
         $validated = $request->validate([
@@ -50,6 +59,31 @@ class CartController extends Controller
                 'status' => 'pending',
             ]);
         }
+
+        /* event(new ProductAddedToCart(
+            product: $cartItem->product,
+            sellerId: $cartItem->product->company_id
+        )); */
+        $seller = User::where('company_id', $companyId)
+            ->where('role', 'seller')
+            ->first();
+
+        if ($seller) {
+            $seller->notify(
+                new ProductAddedToCartNotification([
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'quantity' => $quantity,
+                ])
+            );
+        }
+
+        /* event(new ProductAddedToCart(
+            product: $cartItem->product,
+            sellerId: $companyId
+        ));
+ */
+
 
         return response()->json([
             'message' => '✅ Produit ajouté au panier avec succès.',

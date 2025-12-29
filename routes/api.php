@@ -23,6 +23,8 @@ Route::get('/products/top-rated', [ProductController::class, 'topRated']);
 Route::get('/products/new', [ProductController::class, 'newProducts']);
 Route::get('/produits/recents', [ProductController::class, 'recents']);
 Route::post('/products/{id}/rate', [ProductController::class, 'rateProduct']);
+Route::post('/products/search-by-keywords', [ProductController::class, 'searchByKeywords']);
+
 
 
 Route::get('/products/{id}', [ProductController::class, 'show']);
@@ -31,6 +33,16 @@ Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
 
 Route::get('/produits/search', [ProductController::class, 'search']);
 Route::post('/search-by-image', [ProductController::class, 'searchByImage']);
+
+Route::get('/notifications/unread', function () {
+    return auth()->user()->unreadNotifications;
+});
+
+
+Route::post('/notifications/mark-as-read', function () {
+    auth()->user()->unreadNotifications->markAsRead();
+    return response()->json(['status' => 'ok']);
+});
 
 
 // Product categories routes
