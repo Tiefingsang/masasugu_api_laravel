@@ -155,10 +155,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
 
+    
+
+
+
+
     // Chat routes
     Route::get('/conversations', [ChatController::class,'index']);
+    Route::post('/conversations', [ChatController::class,'createOrGetConversation']); // ✅
     Route::get('/conversations/{id}/messages', [ChatController::class,'messages']);
-    Route::post('/messages/send', [ChatController::class,'send']);
+    Route::post('/messages', [ChatController::class,'send']); // ⚠️ harmonisé avec Flutter
+
 
 
 
