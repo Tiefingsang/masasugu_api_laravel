@@ -8,40 +8,30 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Cart;
-use App\Notifications\OrderCreatedNotification;
-use App\Events\OrderCreated;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
 
     public function store(Request $request){
-        // Log pour déboguer
-        Log::info('📦 Création commande - Données reçues:', $request->all());
-
-        $request->validate([
-            'items' => 'required|array|min:1',
-            'items.*.product_id' => 'required|integer|exists:products,id',
-            'items.*.quantity' => 'required|integer|min:1',
-            'payment_method' => 'nullable|string',
-            'total' => 'required|numeric|min:0',
-        ]);
-
-        $user = Auth::user();
-
-        if (!$user) {
-            Log::error('❌ Utilisateur non authentifié');
-            return response()->json(['message' => 'Utilisateur non authentifié.'], 401);
-        }
-
-        Log::info('👤 Utilisateur ID:', ['user_id' => $user->id]);
-
-        DB::beginTransaction();
-
         try {
-            // Calcul du total + récupération du company_id
+            Log::info('📦 Création commande');
+
+            $request->validate([
+                'items' => 'required|array|min:1',
+                'items.*.product_id' => 'required|integer|exists:products,id',
+                'items.*.quantity' => 'required|integer|min:1',
+                'payment_method' => 'nullable|string',
+                'total' => 'required|numeric|min:0',
+            ]);
+
+            $user = Auth::user();
+
+            if (!$user) {
+                return response()->json(['message' => 'Utilisateur non authentifié.'], 401);
+            }
+
             $total = 0;
             $firstCompanyId = null;
 
@@ -57,13 +47,9 @@ class OrderController extends Controller
             }
 
             if (!$firstCompanyId) {
-                Log::error('❌ Aucun company_id trouvé');
                 return response()->json(['message' => 'Aucune boutique associée aux produits.'], 400);
             }
 
-            Log::info('🏪 Company ID:', ['company_id' => $firstCompanyId]);
-
-            // Création de la commande
             $order = Order::create([
                 'user_id' => $user->id,
                 'company_id' => $firstCompanyId,
@@ -72,9 +58,6 @@ class OrderController extends Controller
                 'payment_method' => $request->payment_method ?? 'cash_on_delivery',
             ]);
 
-            Log::info('✅ Commande créée', ['order_id' => $order->id]);
-
-            // Enregistrement des items
             foreach ($request->items as $item) {
                 $product = Product::find($item['product_id']);
                 if ($product) {
@@ -87,41 +70,9 @@ class OrderController extends Controller
                 }
             }
 
-            // Suppression du panier
             Cart::where('user_id', $user->id)
                 ->whereIn('product_id', collect($request->items)->pluck('product_id'))
                 ->delete();
-
-            Log::info('🗑️ Panier vidé');
-
-            // 🔹 Création de la notification avec Laravel Notifiable
-            try {
-                // Récupérer le vendeur (propriétaire de la boutique)
-                $seller = \App\Models\User::where('company_id', $firstCompanyId)
-                    ->where('role', 'seller')
-                    ->first();
-
-                if ($seller) {
-                    // Envoyer la notification via le système Laravel
-                    $seller->notify(new OrderCreatedNotification($order));
-                    Log::info('📢 Notification envoyée au vendeur', ['seller_id' => $seller->id]);
-
-                    // Déclencher l'événement pour broadcast
-                    try {
-                        broadcast(new OrderCreated($order))->toOthers();
-                        Log::info('📡 Événement OrderCreated broadcasté');
-                    } catch (\Exception $e) {
-                        Log::warning('⚠️ Erreur broadcast: ' . $e->getMessage());
-                    }
-                } else {
-                    Log::warning('⚠️ Aucun vendeur trouvé pour company_id: ' . $firstCompanyId);
-                }
-            } catch (\Exception $e) {
-                Log::warning('⚠️ Erreur notification: ' . $e->getMessage());
-                // On continue même si la notification échoue
-            }
-
-            DB::commit();
 
             return response()->json([
                 'message' => 'Commande créée avec succès 🎉',
@@ -129,11 +80,9 @@ class OrderController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('❌ Erreur transaction: ' . $e->getMessage());
+            Log::error('❌ Erreur: ' . $e->getMessage());
             return response()->json([
-                'message' => 'Erreur lors de la création de la commande',
-                'error' => $e->getMessage()
+                'message' => 'Erreur: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -260,5 +209,27 @@ class OrderController extends Controller
         }
 
         return response()->json(array_values($clients));
+    }
+
+    public function destroy($id)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Non authentifié'], 401);
+        }
+
+        $order = Order::findOrFail($id);
+
+        if ($order->user_id !== $user->id) {
+            return response()->json(['message' => 'Non autorisé'], 403);
+        }
+
+        if (!in_array($order->status, ['cancelled', 'annulee'])) {
+            return response()->json(['message' => 'Seules les commandes annulées peuvent être supprimées'], 400);
+        }
+
+        $order->delete();
+
+        return response()->json(['message' => 'Commande supprimée avec succès']);
     }
 }

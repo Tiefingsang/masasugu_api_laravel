@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Auth;
 
 class OrderController extends Controller
 {
-    
+
    public function store(Request $request){
         $request->validate([
             'items' => 'required|array|min:1',
