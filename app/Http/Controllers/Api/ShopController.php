@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\Api;
-use App\Http\Controllers\Controller; 
+use App\Http\Controllers\Controller;
 
 use App\Models\Company;
 use App\Models\Category;
@@ -31,56 +31,7 @@ class ShopController extends Controller
         return response()->json(['shop' => $shop], 200);
     }
 
-    /**
-     * 🏪 Créer une nouvelle boutique (Company)
-     */
-    /* public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'user_id'       => 'required|integer|exists:users,id',
-            'name'          => 'required|string|max:255',
-            'category_id'   => 'nullable|integer|exists:categories,id',
-            'contact_email' => 'nullable|email|max:255',
-            'contact_phone' => 'nullable|string|max:50',
-            'country'       => 'nullable|string|max:100',
-            'address'       => 'nullable|string|max:255',
-            'website'       => 'nullable|string|max:255',
-            'logo'          => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        // Vérifier si l’utilisateur a déjà une boutique
-        $existingShop = Company::where('user_id', $request->user_id)->first();
-        if ($existingShop) {
-            return response()->json([
-                'message' => 'Cet utilisateur possède déjà une boutique.',
-                'shop' => $existingShop
-            ], 409);
-        }
-
-        // Créer la boutique
-        $shop = Company::create([
-            'user_id'       => $request->user_id,
-            'name'          => $request->name,
-            'country'       => $request->country,
-            'address'       => $request->address,
-            'website'       => $request->website,
-            'is_verified'   => false,
-            'contact_email' => $request->contact_email,
-            'contact_phone' => $request->contact_phone,
-            'logo'          => $request->logo,
-        ]);
-
-        return response()->json([
-            'message' => 'Boutique créée avec succès 🎉',
-            'shop' => $shop
-        ], 201);
-    } */
+    
    public function store(Request $request)
 {
     $validator = Validator::make($request->all(), [

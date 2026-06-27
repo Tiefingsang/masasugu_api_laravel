@@ -69,7 +69,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::put('/user/update', [AuthController::class, 'updateProfile']);
     Route::post('/user/avatar', [AuthController::class, 'updateAvatar']);
-    
+
     Route::post('/logout', [AuthController::class, 'logout']);
 
 
@@ -81,9 +81,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/products/{id}/like', [ProductController::class, 'toggleLike']);
     Route::post('/products/{id}/rate', [ProductController::class, 'rateProduct']);
 
-    
 
-    
+
+
 
     // Video upload route
     Route::post('/products/{id}/video', [ProductController::class, 'uploadVideo']);
@@ -95,14 +95,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // Search products route
 
 
-    
 
 
-    
+
+
 
 
     //store
-   
+
 
     Route::get('/shops', [ShopController::class, 'index']);
     Route::get('/shops/user/{userId}', [ShopController::class, 'getByUser']);
@@ -149,36 +149,36 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Récupérer les commandes pour un magasin spécifique
     Route::get('/companies/{company}/orders', [OrderController::class, 'getShopOrders']);
-    
+
     // Mettre à jour le statut d'une commande
     Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus']);
 
 
 
-    
+
 
 
 
 
     // Chat routes
     Route::get('/conversations', [ChatController::class,'index']);
-    Route::post('/conversations', [ChatController::class,'createOrGetConversation']); // ✅
+    Route::post('/conversations', [ChatController::class,'createOrGetConversation']); // 
     Route::get('/conversations/{id}/messages', [ChatController::class,'messages']);
-    Route::post('/messages', [ChatController::class,'send']); // ⚠️ harmonisé avec Flutter
+    Route::post('/messages', [ChatController::class,'send']); //  harmonisé avec Flutter
 
 
 
 
-    
-
-
-    
-
-    
 
 
 
 
-    
+
+
+
+
+
+
+
 
 });

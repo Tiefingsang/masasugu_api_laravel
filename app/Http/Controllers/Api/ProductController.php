@@ -12,30 +12,12 @@ use Illuminate\Support\Facades\Storage;
 
 class ProductController extends Controller
 {
-    /**
-     * Afficher tous les produits (liste publique ou filtrée)
-     */
-    /* public function index(Request $request)
-    {
-        $query = Product::with(['company', 'user', 'images', 'category'])
-            ->where('status', 'approved');
-
-        if ($request->has('category_id')) {
-            $query->where('category_id', $request->category_id);
-        }
-
-        if ($request->has('company_id')) {
-            $query->where('company_id', $request->company_id);
-        }
-
-        return response()->json($query->paginate(20));
-    }
- */
+   
     public function search(Request $request){
         $query = $request->query('q');
         $produits = Product::where(
             'name', 'like', "%{$query}%"
-            
+
             )->get();
 
 
@@ -66,12 +48,12 @@ class ProductController extends Controller
 }
 
 
-    
+
 
 
    public function searchByKeywords(Request $request)
 {
-    
+
     $keywords = $request->input('keywords', []);
     $keywords = array_map('strtolower', $keywords);
     $keywords = $this->normalizeKeywords($keywords);
@@ -155,9 +137,9 @@ class ProductController extends Controller
     /**
      * Créer un produit (par un vendeur authentifié)
      */
-    
+
     public function store(Request $request){
-        $user = $request->user(); 
+        $user = $request->user();
 
         $request->validate([
             'category_id' => 'required|exists:categories,id',
@@ -317,11 +299,11 @@ $product->is_liked = $product->likes_list
 {
     $products = Product::where('company_id', $company_id)
         ->where('status', 'approved')
-        ->with('images') 
+        ->with('images')
         ->orderBy('created_at', 'desc')
         ->get();
 
-    
+
     $products->transform(function ($product) {
         // Image principale
         if ($product->main_image && !str_starts_with($product->main_image, 'http')) {
@@ -346,45 +328,6 @@ $product->is_liked = $product->likes_list
 
 
 }
-
-    /* public function update(Request $request, $id)
-{
-    $product = Product::findOrFail($id);
-
-    $validated = $request->validate([
-        'name' => 'required|string|max:255',
-        'description' => 'nullable|string',
-        'price' => 'required|numeric',
-        'stock' => 'required|integer',
-        'brand' => 'nullable|string|max:255',
-        'discount_price' => 'nullable|numeric',
-        'category_id' => 'required|integer',
-        'main_image' => 'nullable|image|mimes:jpeg,png,jpg',
-    ]);
-
-    // ✅ Gestion image principale
-    if ($request->hasFile('main_image')) {
-        if ($product->main_image && file_exists(storage_path('app/public/' . $product->main_image))) {
-            unlink(storage_path('app/public/' . $product->main_image));
-        }
-        $path = $request->file('main_image')->store('products', 'public');
-        $validated['main_image'] = $path;
-    }
-
-    $product->update($validated);
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Produit mis à jour avec succès.',
-        'product' => $product
-    ]);
-} */
-
-
-
-
-
-
 
 
     /**
@@ -416,7 +359,7 @@ $product->is_liked = $product->likes_list
     public function bestOffers(){
         $products = Product::whereNotNull('discount_price')
             ->where('discount_price', '>', 0)
-            ->orderByRaw("(price - discount_price) DESC") 
+            ->orderByRaw("(price - discount_price) DESC")
             ->take(20)
             ->get();
 
@@ -427,16 +370,16 @@ $product->is_liked = $product->likes_list
     }
 
     //Récupérer les produits les mieux notés
-    
+
 
 
 
     public function topRated()
     {
-        $products = Product::orderBy('rating', 'desc')   
-                        ->orderBy('views', 'desc')   
-                        ->orderBy('sales_count', 'desc') 
-                        ->orderBy('likes', 'desc')    
+        $products = Product::orderBy('rating', 'desc')
+                        ->orderBy('views', 'desc')
+                        ->orderBy('sales_count', 'desc')
+                        ->orderBy('likes', 'desc')
                         ->take(20)
                         ->get();
 
