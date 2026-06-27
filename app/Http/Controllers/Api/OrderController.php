@@ -13,10 +13,9 @@ use Illuminate\Support\Facades\Log;
 
 class OrderController extends Controller
 {
-
     public function store(Request $request){
         try {
-            Log::info('📦 Création commande');
+            Log::info('📦 Création commande - Début');
 
             $request->validate([
                 'items' => 'required|array|min:1',
@@ -29,11 +28,15 @@ class OrderController extends Controller
             $user = Auth::user();
 
             if (!$user) {
+                Log::error('❌ Utilisateur non authentifié');
                 return response()->json(['message' => 'Utilisateur non authentifié.'], 401);
             }
 
+            Log::info('👤 Utilisateur ID: ' . $user->id);
+
             $total = 0;
             $firstCompanyId = null;
+            $itemsData = [];
 
             foreach ($request->items as $item) {
                 $product = Product::find($item['product_id']);
@@ -41,15 +44,38 @@ class OrderController extends Controller
                     if (!$firstCompanyId) {
                         $firstCompanyId = $product->company_id;
                     }
-                    $price = $product->discount_price ?? $product->price;
-                    $total += (float)$price * $item['quantity'];
+
+                    // Calcul du prix unitaire (avec remise si applicable)
+                    $unitPrice = $product->discount_price && (float)$product->discount_price > 0
+                        ? (float)$product->discount_price
+                        : (float)$product->price;
+
+                    $total += $unitPrice * $item['quantity'];
+
+                    $itemsData[] = [
+                        'product' => $product,
+                        'unitPrice' => $unitPrice,
+                        'quantity' => $item['quantity']
+                    ];
+
+                    Log::info('📦 Produit ajouté:', [
+                        'product_id' => $product->id,
+                        'name' => $product->name,
+                        'unitPrice' => $unitPrice,
+                        'quantity' => $item['quantity']
+                    ]);
                 }
             }
 
             if (!$firstCompanyId) {
+                Log::error('❌ Aucun company_id trouvé');
                 return response()->json(['message' => 'Aucune boutique associée aux produits.'], 400);
             }
 
+            Log::info('🏪 Company ID: ' . $firstCompanyId);
+            Log::info('💰 Total calculé: ' . $total);
+
+            // Création de la commande
             $order = Order::create([
                 'user_id' => $user->id,
                 'company_id' => $firstCompanyId,
@@ -58,21 +84,26 @@ class OrderController extends Controller
                 'payment_method' => $request->payment_method ?? 'cash_on_delivery',
             ]);
 
-            foreach ($request->items as $item) {
-                $product = Product::find($item['product_id']);
-                if ($product) {
-                    OrderItem::create([
-                        'order_id' => $order->id,
-                        'product_id' => $product->id,
-                        'quantity' => $item['quantity'],
-                        'price' => $product->discount_price ?? $product->price,
-                    ]);
-                }
+            Log::info('✅ Commande créée ID: ' . $order->id);
+
+            // Enregistrement des items
+            foreach ($itemsData as $data) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'product_id' => $data['product']->id,
+                    'quantity' => $data['quantity'],
+                    'price' => $data['unitPrice'],
+                ]);
             }
 
+            Log::info('📦 Items enregistrés: ' . count($itemsData));
+
+            // Suppression du panier
             Cart::where('user_id', $user->id)
                 ->whereIn('product_id', collect($request->items)->pluck('product_id'))
                 ->delete();
+
+            Log::info('🗑️ Panier vidé');
 
             return response()->json([
                 'message' => 'Commande créée avec succès 🎉',
@@ -81,6 +112,8 @@ class OrderController extends Controller
 
         } catch (\Exception $e) {
             Log::error('❌ Erreur: ' . $e->getMessage());
+            Log::error('❌ Trace: ' . $e->getTraceAsString());
+
             return response()->json([
                 'message' => 'Erreur: ' . $e->getMessage()
             ], 500);
