@@ -10,7 +10,7 @@ use App\Http\Controllers\Api\ProductImageController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ChatController;
-use Illuminate\Http\Request; 
+use Illuminate\Http\Request;
 
 
 // Auth routes
@@ -35,38 +35,6 @@ Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
 Route::get('/produits/search', [ProductController::class, 'search']);
 Route::post('/search-by-image', [ProductController::class, 'searchByImage']);
 
-/* Route::get('/notifications/unread', function () {
-    return auth()->user()->unreadNotifications;
-});
-
-
-Route::post('/notifications/mark-as-read', function () {
-    auth()->user()->unreadNotifications->markAsRead();
-    return response()->json(['status' => 'ok']);
-});
-
-Route::get('/notifications', function () {
-        return auth()->user()->notifications;
-    });
-
-    Route::get('/notifications/unread', function () {
-        return auth()->user()->unreadNotifications;
-    });
-
-    Route::post('/notifications/mark-as-read', function (Request $request) {
-        $request->validate(['id' => 'required|string']);
-        $notification = auth()->user()->notifications()->where('id', $request->id)->first();
-        if ($notification) {
-            $notification->markAsRead();
-            return response()->json(['success' => true]);
-        }
-        return response()->json(['success' => false, 'message' => 'Notification non trouvée'], 404);
-    });
-
-    Route::post('/notifications/mark-all-as-read', function () {
-        auth()->user()->unreadNotifications->markAsRead();
-        return response()->json(['success' => true]);
-    }); */
 
 
 // Product categories routes
