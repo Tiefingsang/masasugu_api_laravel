@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Storage;
 
 class ProductController extends Controller
 {
-   
+
     public function search(Request $request){
         $query = $request->query('q');
         $produits = Product::where(
@@ -25,64 +25,64 @@ class ProductController extends Controller
     }
 
     private function normalizeKeywords(array $keywords): array
-{
-    $map = [
-        'shirt' => ['tshirt', 't-shirt', 'chemise', 'haut'],
-        'clothing' => ['vetement', 'vêtements', 'habit'],
-        'shoe' => ['chaussure', 'basket', 'sneaker'],
-        'phone' => ['telephone', 'smartphone', 'mobile'],
-        'laptop' => ['ordinateur', 'pc'],
-    ];
+    {
+        $map = [
+            'shirt' => ['tshirt', 't-shirt', 'chemise', 'haut'],
+            'clothing' => ['vetement', 'vêtements', 'habit'],
+            'shoe' => ['chaussure', 'basket', 'sneaker'],
+            'phone' => ['telephone', 'smartphone', 'mobile'],
+            'laptop' => ['ordinateur', 'pc'],
+        ];
 
-    $final = [];
+        $final = [];
 
-    foreach ($keywords as $word) {
-        $final[] = $word;
+        foreach ($keywords as $word) {
+            $final[] = $word;
 
-        if (isset($map[$word])) {
-            $final = array_merge($final, $map[$word]);
+            if (isset($map[$word])) {
+                $final = array_merge($final, $map[$word]);
+            }
         }
-    }
 
-    return array_unique($final);
-}
+        return array_unique($final);
+    }
 
 
 
 
 
    public function searchByKeywords(Request $request)
-{
+    {
 
-    $keywords = $request->input('keywords', []);
-    $keywords = array_map('strtolower', $keywords);
-    $keywords = $this->normalizeKeywords($keywords);
+        $keywords = $request->input('keywords', []);
+        $keywords = array_map('strtolower', $keywords);
+        $keywords = $this->normalizeKeywords($keywords);
 
-    if (!is_array($keywords) || empty($keywords)) {
+        if (!is_array($keywords) || empty($keywords)) {
+            return response()->json([
+                'data' => [],
+                'message' => 'No keywords provided'
+            ]);
+        }
+
+        $query = Product::with(['category', 'images'])
+            ->where('status', 'approved')
+            ->where(function ($q) use ($keywords) {
+                foreach ($keywords as $word) {
+                    $word = strtolower($word);
+
+                    $q->orWhereRaw('LOWER(name) LIKE ?', ["%{$word}%"])
+                    ->orWhereRaw('LOWER(description) LIKE ?', ["%{$word}%"])
+                    ->orWhereHas('category', function ($cat) use ($word) {
+                        $cat->whereRaw('LOWER(name) LIKE ?', ["%{$word}%"]);
+                    });
+                }
+            });
+
         return response()->json([
-            'data' => [],
-            'message' => 'No keywords provided'
+            'data' => $query->limit(20)->get()
         ]);
     }
-
-    $query = Product::with(['category', 'images'])
-        ->where('status', 'approved')
-        ->where(function ($q) use ($keywords) {
-            foreach ($keywords as $word) {
-                $word = strtolower($word);
-
-                $q->orWhereRaw('LOWER(name) LIKE ?', ["%{$word}%"])
-                  ->orWhereRaw('LOWER(description) LIKE ?', ["%{$word}%"])
-                  ->orWhereHas('category', function ($cat) use ($word) {
-                      $cat->whereRaw('LOWER(name) LIKE ?', ["%{$word}%"]);
-                  });
-            }
-        });
-
-    return response()->json([
-        'data' => $query->limit(20)->get()
-    ]);
-}
 
 
 
@@ -197,73 +197,185 @@ class ProductController extends Controller
         $product = Product::with(['company', 'images', 'category'])->findOrFail($id);
         return response()->json($product);
     } */
-   public function show($id){
-        $product = Product::with(['company', 'images', 'category','likes'])->findOrFail($id);
 
-        $product->main_image_url = $product->main_image
-            ? asset('storage/' . $product->main_image)
-            : null;
 
-        $product->loadCount('likes');
+         public function show($id)
+    {
+        try {
+            // 🔹 Récupération du produit avec toutes les relations
+            $product = Product::with(['company', 'images', 'category', 'likes'])
+                ->find($id); // find() au lieu de findOrFail() pour gérer manuellement
 
-// Renommer la liste
-$product->likes_list = $product->likes; // liste complète
+            // 🔹 Vérifier si le produit existe
+            if (!$product) {
+                Log::warning("Produit non trouvé", ['product_id' => $id]);
+                return response()->json([
+                    'error' => 'Produit non trouvé',
+                    'message' => 'Ce produit n\'existe pas ou a été supprimé.'
+                ], 404);
+            }
 
-// Ajouter juste le nombre
-$product->likes = $product->likes_count;
+            // 🔹 Vérifier le statut du produit (optionnel)
+            if ($product->status !== 'approved') {
+                Log::warning("Produit non approuvé", [
+                    'product_id' => $id,
+                    'status' => $product->status
+                ]);
+                // On peut quand même l'afficher ou retourner une erreur selon le besoin
+            }
 
-// Si user a liké
-$product->is_liked = $product->likes_list
-    ->where('user_id', auth()->id())
-    ->count() > 0;
+            // 🔹 Image principale - avec vérification
+            if ($product->main_image && !empty($product->main_image)) {
+                $product->main_image_url = asset('storage/' . $product->main_image);
+            } else {
+                $product->main_image_url = null;
+            }
 
-        return response()->json($product);
+            // 🔹 Charger le compteur de likes
+            $product->loadCount('likes');
+
+            // 🔹 Liste des likes
+            $product->likes_list = $product->likes;
+
+            // 🔹 Nombre de likes
+            $product->likes = $product->likes_count ?? $product->likes()->count();
+
+            // 🔹 Vérifier si l'utilisateur a liké
+            $user = auth()->user();
+            $product->is_liked = $user
+                ? $product->likes_list->where('user_id', $user->id)->count() > 0
+                : false;
+
+            // 🔹 Prix final (avec promotion)
+            $product->final_price = $product->discount_price && $product->discount_price > 0
+                ? $product->discount_price
+                : $product->price;
+
+            // 🔹 Description - éviter les null
+            $product->description = $product->description ?? '';
+
+            // 🔹 Nom de la boutique
+            if ($product->company) {
+                $product->company_name = $product->company->name ?? 'Boutique Masasugu';
+                $product->company_logo = $product->company->logo
+                    ? asset('storage/' . $product->company->logo)
+                    : null;
+            } else {
+                $product->company_name = 'Boutique Masasugu';
+                $product->company_logo = null;
+            }
+
+            // 🔹 Catégorie
+            if ($product->category) {
+                $product->category_name = $product->category->name ?? 'Non catégorisé';
+            } else {
+                $product->category_name = 'Non catégorisé';
+            }
+
+            // 🔹 Images supplémentaires - avec vérification
+            if ($product->images && $product->images->isNotEmpty()) {
+                $product->images->transform(function ($image) {
+                    if ($image->image_path && !empty($image->image_path)) {
+                        $image->image_url = asset('storage/' . $image->image_path);
+                    } else {
+                        $image->image_url = null;
+                    }
+                    return $image;
+                });
+            }
+
+            Log::info("Produit chargé avec succès", [
+                'product_id' => $id,
+                'name' => $product->name
+            ]);
+
+            return response()->json($product);
+
+        } catch (\Exception $e) {
+            // 🔹 Log de l'erreur détaillée
+            Log::error("Erreur lors du chargement du produit", [
+                'product_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'Erreur lors du chargement du produit',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
-    /**
-     * Mise à jour du produit
-     */
-     public function update(Request $request, $id){
-    $product = Product::findOrFail($id);
 
-    // 🔒 Vérification d’autorisation
-    if ($product->user_id !== Auth::id()) {
-        return response()->json(['error' => 'Non autorisé.'], 403);
-    }
+    // public function show($id){
+    //     $product = Product::with(['company', 'images', 'category','likes'])->findOrFail($id);
 
-    // ✅ Validation unique (pas besoin de deux appels)
-    $validated = $request->validate([
-        'name'            => 'required|string|max:255',
-        'description'     => 'nullable|string',
-        'price'           => 'required|numeric|min:0',
-        'stock'           => 'required|integer|min:0',
-        'brand'           => 'nullable|string|max:255',
-        'discount_price'  => 'nullable|numeric|min:0',
-        'category_id'     => 'required|integer|exists:categories,id',
-        'main_image'      => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
-    ]);
+    //     $product->main_image_url = $product->main_image
+    //         ? asset('storage/' . $product->main_image)
+    //         : null;
 
-    // ✅ Gestion de la nouvelle image principale
-    if ($request->hasFile('main_image')) {
-        // Suppression de l’ancienne image
-        if ($product->main_image && Storage::disk('public')->exists($product->main_image)) {
-            Storage::disk('public')->delete($product->main_image);
+    //     $product->loadCount('likes');
+
+    //     // Renommer la liste
+    //     $product->likes_list = $product->likes; // liste complète
+
+    //     // Ajouter juste le nombre
+    //     $product->likes = $product->likes_count;
+
+    //     // Si user a liké
+    //     $product->is_liked = $product->likes_list
+    //         ->where('user_id', auth()->id())
+    //         ->count() > 0;
+
+    //             return response()->json($product);
+    //         }
+
+        /**
+         * Mise à jour du produit
+         */
+
+
+    public function update(Request $request, $id){
+        $product = Product::findOrFail($id);
+
+        // 🔒 Vérification d’autorisation
+        if ($product->user_id !== Auth::id()) {
+            return response()->json(['error' => 'Non autorisé.'], 403);
         }
 
-        // Enregistrement de la nouvelle image
-        $path = $request->file('main_image')->store('products', 'public');
-        $validated['main_image'] = $path;
+        // ✅ Validation unique (pas besoin de deux appels)
+        $validated = $request->validate([
+            'name'            => 'required|string|max:255',
+            'description'     => 'nullable|string',
+            'price'           => 'required|numeric|min:0',
+            'stock'           => 'required|integer|min:0',
+            'brand'           => 'nullable|string|max:255',
+            'discount_price'  => 'nullable|numeric|min:0',
+            'category_id'     => 'required|integer|exists:categories,id',
+            'main_image'      => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+        ]);
+
+        // ✅ Gestion de la nouvelle image principale
+        if ($request->hasFile('main_image')) {
+            // Suppression de l’ancienne image
+            if ($product->main_image && Storage::disk('public')->exists($product->main_image)) {
+                Storage::disk('public')->delete($product->main_image);
+            }
+
+            // Enregistrement de la nouvelle image
+            $path = $request->file('main_image')->store('products', 'public');
+            $validated['main_image'] = $path;
+        }
+
+        // ✅ Mise à jour du produit
+        $product->update($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Produit mis à jour avec succès.',
+            'product' => $product->fresh(), // renvoie les données actualisées
+        ], 200);
     }
-
-    // ✅ Mise à jour du produit
-    $product->update($validated);
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Produit mis à jour avec succès.',
-        'product' => $product->fresh(), // renvoie les données actualisées
-    ], 200);
-}
 
     /**
      * Télécharger une vidéo pour le produit
