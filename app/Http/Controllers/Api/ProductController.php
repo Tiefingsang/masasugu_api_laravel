@@ -87,9 +87,53 @@ class ProductController extends Controller
 
 
 
+//     public function index(Request $request){
+//         $query = Product::with(['company', 'user', 'images', 'category'])
+//             ->where('status', 'approved');
+
+
+//         if ($request->has('category_id')) {
+//             $query->where('category_id', $request->category_id);
+//         }
+
+//         if ($request->has('company_id')) {
+//             $query->where('company_id', $request->company_id);
+//         }
+
+//         $products = $query->paginate(20);
+
+
+//         $products->getCollection()->transform(function ($product) {
+//             $product->main_image_url = $product->main_image
+//             ? asset('storage/' . $product->main_image)
+//             : null;
+
+//         // Téléphone vendeur : priorité à la company, sinon user
+//             $product->vendor_phone =
+//                 ($product->company->phone ?? null)
+//                 ?: ($product->user->phone ?? null);
+
+//              $product->likes_list = $product->likes;
+
+//             // envoyer juste le nombre dans likes
+//             $product->likes = $product->likes()->count();
+
+//             // savoir si l’utilisateur a liké
+//             $product->is_liked = $product->likes()
+//                 ->where('user_id', auth()->id())
+//                 ->exists();
+//     return $product;
+// });
+
+
+
+//         return response()->json($products);
+//     }
+
     public function index(Request $request){
         $query = Product::with(['company', 'user', 'images', 'category'])
-            ->where('status', 'approved');
+            ->where('status', 'approved')
+            ->orderBy('created_at', 'desc');
 
         if ($request->has('category_id')) {
             $query->where('category_id', $request->category_id);
@@ -99,39 +143,29 @@ class ProductController extends Controller
             $query->where('company_id', $request->company_id);
         }
 
+        //  Pagination : 20 produits par page (défaut Laravel)
         $products = $query->paginate(20);
 
-        // 🔹 Ajouter l’URL complète de l’image
-        /* $products->getCollection()->transform(function ($product) {
+        //  Transform pour ajouter les URLs complètes + likes
+        $products->getCollection()->transform(function ($product) {
             $product->main_image_url = $product->main_image
                 ? asset('storage/' . $product->main_image)
                 : null;
-            return $product;
-        }); */
-        $products->getCollection()->transform(function ($product) {
-            $product->main_image_url = $product->main_image
-            ? asset('storage/' . $product->main_image)
-            : null;
 
-        // Téléphone vendeur : priorité à la company, sinon user
             $product->vendor_phone =
                 ($product->company->phone ?? null)
                 ?: ($product->user->phone ?? null);
 
-             $product->likes_list = $product->likes;
-
-            // envoyer juste le nombre dans likes
+            $product->likes_list = $product->likes;
             $product->likes = $product->likes()->count();
-
-            // savoir si l’utilisateur a liké
             $product->is_liked = $product->likes()
                 ->where('user_id', auth()->id())
                 ->exists();
-    return $product;
-});
 
+            return $product;
+        });
 
-
+        // ✅ Laravel renvoie déjà : current_page, last_page, data, total, etc.
         return response()->json($products);
     }
     /**
@@ -199,140 +233,6 @@ class ProductController extends Controller
     }
 
 
-    //      public function show($id)
-    // {
-    //     try {
-    //         // 🔹 Récupération du produit avec toutes les relations
-    //         $product = Product::with(['company', 'images', 'category', 'likes'])
-    //             ->find($id); // find() au lieu de findOrFail() pour gérer manuellement
-
-    //         // 🔹 Vérifier si le produit existe
-    //         if (!$product) {
-    //             Log::warning("Produit non trouvé", ['product_id' => $id]);
-    //             return response()->json([
-    //                 'error' => 'Produit non trouvé',
-    //                 'message' => 'Ce produit n\'existe pas ou a été supprimé.'
-    //             ], 404);
-    //         }
-
-    //         // 🔹 Vérifier le statut du produit (optionnel)
-    //         if ($product->status !== 'approved') {
-    //             Log::warning("Produit non approuvé", [
-    //                 'product_id' => $id,
-    //                 'status' => $product->status
-    //             ]);
-    //             // On peut quand même l'afficher ou retourner une erreur selon le besoin
-    //         }
-
-    //         // 🔹 Image principale - avec vérification
-    //         if ($product->main_image && !empty($product->main_image)) {
-    //             $product->main_image_url = asset('storage/' . $product->main_image);
-    //         } else {
-    //             $product->main_image_url = null;
-    //         }
-
-    //         // 🔹 Charger le compteur de likes
-    //         $product->loadCount('likes');
-
-    //         // 🔹 Liste des likes
-    //         $product->likes_list = $product->likes;
-
-    //         // 🔹 Nombre de likes
-    //         $product->likes = $product->likes_count ?? $product->likes()->count();
-
-    //         // 🔹 Vérifier si l'utilisateur a liké
-    //         $user = auth()->user();
-    //         $product->is_liked = $user
-    //             ? $product->likes_list->where('user_id', $user->id)->count() > 0
-    //             : false;
-
-    //         // 🔹 Prix final (avec promotion)
-    //         $product->final_price = $product->discount_price && $product->discount_price > 0
-    //             ? $product->discount_price
-    //             : $product->price;
-
-    //         // 🔹 Description - éviter les null
-    //         $product->description = $product->description ?? '';
-
-    //         // 🔹 Nom de la boutique
-    //         if ($product->company) {
-    //             $product->company_name = $product->company->name ?? 'Boutique Masasugu';
-    //             $product->company_logo = $product->company->logo
-    //                 ? asset('storage/' . $product->company->logo)
-    //                 : null;
-    //         } else {
-    //             $product->company_name = 'Boutique Masasugu';
-    //             $product->company_logo = null;
-    //         }
-
-    //         // 🔹 Catégorie
-    //         if ($product->category) {
-    //             $product->category_name = $product->category->name ?? 'Non catégorisé';
-    //         } else {
-    //             $product->category_name = 'Non catégorisé';
-    //         }
-
-    //         // 🔹 Images supplémentaires - avec vérification
-    //         if ($product->images && $product->images->isNotEmpty()) {
-    //             $product->images->transform(function ($image) {
-    //                 if ($image->image_path && !empty($image->image_path)) {
-    //                     $image->image_url = asset('storage/' . $image->image_path);
-    //                 } else {
-    //                     $image->image_url = null;
-    //                 }
-    //                 return $image;
-    //             });
-    //         }
-
-    //         Log::info("Produit chargé avec succès", [
-    //             'product_id' => $id,
-    //             'name' => $product->name
-    //         ]);
-
-    //         return response()->json($product);
-
-    //     } catch (\Exception $e) {
-    //         // 🔹 Log de l'erreur détaillée
-    //         Log::error("Erreur lors du chargement du produit", [
-    //             'product_id' => $id,
-    //             'error' => $e->getMessage(),
-    //             'trace' => $e->getTraceAsString()
-    //         ]);
-
-    //         return response()->json([
-    //             'error' => 'Erreur lors du chargement du produit',
-    //             'message' => $e->getMessage()
-    //         ], 500);
-    //     }
-    // }
-
-
-    // public function show($id){
-    //     $product = Product::with(['company', 'images', 'category','likes'])->findOrFail($id);
-
-    //     $product->main_image_url = $product->main_image
-    //         ? asset('storage/' . $product->main_image)
-    //         : null;
-
-    //     $product->loadCount('likes');
-
-    //     // Renommer la liste
-    //     $product->likes_list = $product->likes; // liste complète
-
-    //     // Ajouter juste le nombre
-    //     $product->likes = $product->likes_count;
-
-    //     // Si user a liké
-    //     $product->is_liked = $product->likes_list
-    //         ->where('user_id', auth()->id())
-    //         ->count() > 0;
-
-    //             return response()->json($product);
-    //         }
-
-        /**
-         * Mise à jour du produit
-         */
 
 
     public function update(Request $request, $id){
