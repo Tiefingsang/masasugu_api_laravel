@@ -165,93 +165,198 @@ class ChatController extends Controller{
         return response()->json($msg, 201);
     } */
 
-    public function send(Request $request){
-        $request->validate([
-            'conversation_id' => 'required|exists:conversations,id',
-            'content' => 'required|string',
-            'receiver_id' => 'required|exists:users,id',
-        ]);
+    // public function send(Request $request){
+    //     $request->validate([
+    //         'conversation_id' => 'required|exists:conversations,id',
+    //         'content' => 'required|string',
+    //         'receiver_id' => 'required|exists:users,id',
+    //     ]);
 
-        $user = Auth::user();
+    //     $user = Auth::user();
 
-        $conversation = Conversation::findOrFail($request->conversation_id);
+    //     $conversation = Conversation::findOrFail($request->conversation_id);
 
-        $msg = Message::create([
-            'conversation_id' => $conversation->id,
-            'sender_id' => $user->id,
-            'receiver_id' => $request->receiver_id,
-            'content' => $request->content,
-            'type' => 'text',
-        ]);
+    //     $msg = Message::create([
+    //         'conversation_id' => $conversation->id,
+    //         'sender_id' => $user->id,
+    //         'receiver_id' => $request->receiver_id,
+    //         'content' => $request->content,
+    //         'type' => 'text',
+    //     ]);
 
-        $conversation->update([
-            'last_message' => $msg->content,
-            'last_at' => now(),
-        ]);
+    //     $conversation->update([
+    //         'last_message' => $msg->content,
+    //         'last_at' => now(),
+    //     ]);
 
-        broadcast(new MessageSent($msg))->toOthers();
+    //     broadcast(new MessageSent($msg))->toOthers();
 
-        //return response()->json(['message' => $msg], 201);
-        return response()->json($msg, 201);
+    //     //return response()->json(['message' => $msg], 201);
+    //     return response()->json($msg, 201);
 
+    // }
+
+    public function send(Request $request)
+{
+    $request->validate([
+        'conversation_id' => 'required|exists:conversations,id',
+        'content'         => 'required|string',
+    ]);
+
+    $user = Auth::user();
+    $conversation = Conversation::with('company.user')->findOrFail($request->conversation_id);
+
+    // ✅ CALCULER LE VRAI DESTINATAIRE CÔTÉ BACKEND
+    // Si l'expéditeur est l'acheteur → destinataire = vendeur (user_id de la company)
+    // Si l'expéditeur est le vendeur → destinataire = acheteur (user_id de la conversation)
+    if ($conversation->user_id == $user->id) {
+        // L'acheteur envoie → au vendeur
+        $receiverId = $conversation->company->user_id;
+    } else {
+        // Le vendeur envoie → à l'acheteur
+        $receiverId = $conversation->user_id;
     }
+
+    if (!$receiverId) {
+        return response()->json([
+            'error' => 'Destinataire introuvable',
+        ], 422);
+    }
+
+    $msg = Message::create([
+        'conversation_id' => $conversation->id,
+        'sender_id'       => $user->id,
+        'receiver_id'     => $receiverId,   // ✅ Toujours un users.id
+        'content'         => $request->content,
+        'type'            => 'text',
+    ]);
+
+    $conversation->update([
+        'last_message' => $msg->content,
+        'last_at'      => now(),
+    ]);
+
+    // 🔔 Broadcast SANS toOthers (le vendeur DOIT recevoir)
+    broadcast(new MessageSent($msg));
+
+    return response()->json($msg, 201);
+}
 
     /**
  * 📎 Upload d'une pièce jointe (image, vidéo, fichier)
  * Le fichier est stocké dans `storage/app/public/chat/{type}/`
  * Les métadonnées sont stockées dans la colonne `metadata` (JSON).
  */
+    // public function upload(Request $request)
+    // {
+    //     $request->validate([
+    //         'conversation_id' => 'required|exists:conversations,id',
+    //         'receiver_id'     => 'required|exists:users,id',
+    //         'file'            => 'required|file|max:10240',
+    //         'type'            => 'required|in:image,video,file,audio',
+    //         'caption'         => 'nullable|string|max:500',
+    //     ]);
+
+    //     $user = Auth::user();
+    //     $conversation = Conversation::findOrFail($request->conversation_id);
+
+    //     // Dossier selon le type
+    //     $folder = match ($request->type) {
+    //         'image' => 'chat/images',
+    //         'video' => 'chat/videos',
+    //         'audio' => 'chat/audios',
+    //         default => 'chat/files',
+    //     };
+
+    //     $file = $request->file('file');
+    //     $path = $file->store($folder, 'public');
+
+
+    //     $msg = Message::create([
+    //         'conversation_id' => $conversation->id,
+    //         'sender_id'       => $user->id,
+    //         'receiver_id'     => $request->receiver_id,
+    //         'content'         => $request->caption ?? '',
+    //         'type'            => $request->type,
+    //         'metadata'        => [
+    //             'path' => $path,
+    //             'url'  => asset('storage/' . $path),
+    //             'name' => $file->getClientOriginalName(),
+    //             'size' => $file->getSize(),
+    //             'mime' => $file->getMimeType(),
+    //         ],
+    //     ]);
+
+
+    //     $conversation->update([
+    //         'last_message' => $request->caption ?? "📎 Pièce jointe",
+    //         'last_at'      => now(),
+    //     ]);
+
+    //     // Broadcast temps réel
+    //     broadcast(new MessageSent($msg))->toOthers();
+
+    //     return response()->json($msg, 201);
+    // }
+
     public function upload(Request $request)
-    {
-        $request->validate([
-            'conversation_id' => 'required|exists:conversations,id',
-            'receiver_id'     => 'required|exists:users,id',
-            'file'            => 'required|file|max:10240', // 10 Mo max
-            'type'            => 'required|in:image,video,file,audio',
-            'caption'         => 'nullable|string|max:500',
-        ]);
+{
+    $request->validate([
+        'conversation_id' => 'required|exists:conversations,id',
+        'file'            => 'required|file|max:10240',
+        'type'            => 'required|in:image,video,file,audio',
+        'caption'         => 'nullable|string|max:500',
+    ]);
 
-        $user = Auth::user();
-        $conversation = Conversation::findOrFail($request->conversation_id);
+    $user = Auth::user();
+    $conversation = Conversation::with('company.user')->findOrFail($request->conversation_id);
 
-        // 📁 Dossier selon le type
-        $folder = match ($request->type) {
-            'image' => 'chat/images',
-            'video' => 'chat/videos',
-            'audio' => 'chat/audios',
-            default => 'chat/files',
-        };
-
-        $file = $request->file('file');
-        $path = $file->store($folder, 'public');
-
-
-        $msg = Message::create([
-            'conversation_id' => $conversation->id,
-            'sender_id'       => $user->id,
-            'receiver_id'     => $request->receiver_id,
-            'content'         => $request->caption ?? '',
-            'type'            => $request->type,
-            'metadata'        => [
-                'path' => $path,
-                'url'  => asset('storage/' . $path),
-                'name' => $file->getClientOriginalName(),
-                'size' => $file->getSize(),
-                'mime' => $file->getMimeType(),
-            ],
-        ]);
-
-
-        $conversation->update([
-            'last_message' => $request->caption ?? "📎 Pièce jointe",
-            'last_at'      => now(),
-        ]);
-
-        // 🔔 Broadcast temps réel
-        broadcast(new MessageSent($msg))->toOthers();
-
-        return response()->json($msg, 201);
+    // ✅ Même calcul côté backend
+    if ($conversation->user_id == $user->id) {
+        $receiverId = $conversation->company->user_id;
+    } else {
+        $receiverId = $conversation->user_id;
     }
+
+    if (!$receiverId) {
+        return response()->json(['error' => 'Destinataire introuvable'], 422);
+    }
+
+    $folder = match ($request->type) {
+        'image' => 'chat/images',
+        'video' => 'chat/videos',
+        'audio' => 'chat/audios',
+        default => 'chat/files',
+    };
+
+    $file = $request->file('file');
+    $path = $file->store($folder, 'public');
+
+    $msg = Message::create([
+        'conversation_id' => $conversation->id,
+        'sender_id'       => $user->id,
+        'receiver_id'     => $receiverId,   // ✅
+        'content'         => $request->caption ?? '',
+        'type'            => $request->type,
+        'metadata'        => [
+            'path' => $path,
+            'url'  => asset('storage/' . $path),
+            'name' => $file->getClientOriginalName(),
+            'size' => $file->getSize(),
+            'mime' => $file->getMimeType(),
+        ],
+    ]);
+
+    $conversation->update([
+        'last_message' => $request->caption ?? "📎 Pièce jointe",
+        'last_at'      => now(),
+    ]);
+
+    // ✅ Sans toOthers
+    broadcast(new MessageSent($msg));
+
+    return response()->json($msg, 201);
+}
 
 
     public function markAsRead($conversationId){

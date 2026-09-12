@@ -96,9 +96,12 @@ class Company extends Model
         return $this->hasMany(Order::class);
     }
 
-    
+    // app/Models/Company.php
 
-    
+
+
+
+
 
 
 }
