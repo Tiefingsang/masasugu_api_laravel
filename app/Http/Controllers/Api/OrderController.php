@@ -107,29 +107,30 @@ class OrderController extends Controller
             Log::info('🗑️ Panier vidé');
 
             // 🔔 ENVOYER LA NOTIFICATION AU VENDEUR
+            // 🔔 ENVOYER LA NOTIFICATION AU VENDEUR
             try {
-                // Récupérer le vendeur (propriétaire de la boutique)
+                $order->load('items.product', 'user');
+
                 $seller = \App\Models\User::where('company_id', $firstCompanyId)
                     ->where('role', 'seller')
                     ->first();
+
+                // Fallback : propriétaire du premier produit
+                if (!$seller) {
+                    $product = Product::find($request->items[0]['product_id']);
+                    $seller = $product && $product->user_id
+                        ? \App\Models\User::find($product->user_id)
+                        : null;
+                }
 
                 if ($seller) {
                     $seller->notify(new OrderCreatedNotification($order));
                     Log::info('📢 Notification envoyée au vendeur ID: ' . $seller->id);
                 } else {
-                    // Si pas de vendeur, envoyer au propriétaire du produit
-                    $product = Product::find($request->items[0]['product_id']);
-                    if ($product && $product->user_id) {
-                        $shopOwner = \App\Models\User::find($product->user_id);
-                        if ($shopOwner) {
-                            $shopOwner->notify(new OrderCreatedNotification($order));
-                            Log::info('📢 Notification envoyée au propriétaire ID: ' . $shopOwner->id);
-                        }
-                    }
+                    Log::warning('⚠️ Aucun vendeur trouvé pour company_id: ' . $firstCompanyId);
                 }
             } catch (\Exception $e) {
                 Log::warning('⚠️ Erreur notification: ' . $e->getMessage());
-                // On continue même si la notification échoue
             }
 
             return response()->json([
