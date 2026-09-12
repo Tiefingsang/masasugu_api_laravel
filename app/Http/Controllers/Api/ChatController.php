@@ -97,7 +97,7 @@ class ChatController extends Controller{
 
 
         //return response()->json($conversation, 201);
-    } 
+    }
    /*  public function createOrGetConversation(Request $request){
         $request->validate([
             'receiver_id' => 'required|exists:companies,id',
@@ -194,6 +194,63 @@ class ChatController extends Controller{
         //return response()->json(['message' => $msg], 201);
         return response()->json($msg, 201);
 
+    }
+
+    /**
+ * 📎 Upload d'une pièce jointe (image, vidéo, fichier)
+ * Le fichier est stocké dans `storage/app/public/chat/{type}/`
+ * Les métadonnées sont stockées dans la colonne `metadata` (JSON).
+ */
+    public function upload(Request $request)
+    {
+        $request->validate([
+            'conversation_id' => 'required|exists:conversations,id',
+            'receiver_id'     => 'required|exists:users,id',
+            'file'            => 'required|file|max:10240', // 10 Mo max
+            'type'            => 'required|in:image,video,file,audio',
+            'caption'         => 'nullable|string|max:500',
+        ]);
+
+        $user = Auth::user();
+        $conversation = Conversation::findOrFail($request->conversation_id);
+
+        // 📁 Dossier selon le type
+        $folder = match ($request->type) {
+            'image' => 'chat/images',
+            'video' => 'chat/videos',
+            'audio' => 'chat/audios',
+            default => 'chat/files',
+        };
+
+        $file = $request->file('file');
+        $path = $file->store($folder, 'public');
+
+
+        $msg = Message::create([
+            'conversation_id' => $conversation->id,
+            'sender_id'       => $user->id,
+            'receiver_id'     => $request->receiver_id,
+            'content'         => $request->caption ?? '',
+            'type'            => $request->type,
+            'metadata'        => [
+                'path' => $path,
+                'url'  => asset('storage/' . $path),
+                'name' => $file->getClientOriginalName(),
+                'size' => $file->getSize(),
+                'mime' => $file->getMimeType(),
+            ],
+        ]);
+
+
+        $conversation->update([
+            'last_message' => $request->caption ?? "📎 Pièce jointe",
+            'last_at'      => now(),
+        ]);
+
+        // 🔔 Broadcast temps réel
+        broadcast(new MessageSent($msg))->toOthers();
+
+        return response()->json($msg, 201);
     }
 
 

@@ -182,6 +182,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/conversations', [ChatController::class,'createOrGetConversation']); //
     Route::get('/conversations/{id}/messages', [ChatController::class,'messages']);
     Route::post('/messages', [ChatController::class,'send']); //  harmonisé avec Flutter
+    Route::post('/messages/upload', [ChatController::class, 'upload']);
 
 
 
