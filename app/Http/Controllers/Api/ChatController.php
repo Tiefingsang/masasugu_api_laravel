@@ -9,6 +9,7 @@ use App\Models\Message;
 use App\Events\MessageSent;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use App\Services\FcmService;
 
 class ChatController extends Controller{
     // Liste conversations de l'utilisateur (client) ou de la boutique (vendeur)
@@ -196,51 +197,98 @@ class ChatController extends Controller{
 
     // }
 
-    public function send(Request $request)
-{
-    $request->validate([
-        'conversation_id' => 'required|exists:conversations,id',
-        'content'         => 'required|string',
-    ]);
+   public function send(Request $request)
+    {
+        // ─────────────────────────────────────────────
+        // 1. Validation
+        // ─────────────────────────────────────────────
+        $request->validate([
+            'conversation_id' => 'required|exists:conversations,id',
+            'content'         => 'required|string',
+        ]);
 
-    $user = Auth::user();
-    $conversation = Conversation::with('company.user')->findOrFail($request->conversation_id);
+        $user = Auth::user();
+        $conversation = Conversation::with('company.user')
+            ->findOrFail($request->conversation_id);
 
-    // ✅ CALCULER LE VRAI DESTINATAIRE CÔTÉ BACKEND
-    // Si l'expéditeur est l'acheteur → destinataire = vendeur (user_id de la company)
-    // Si l'expéditeur est le vendeur → destinataire = acheteur (user_id de la conversation)
-    if ($conversation->user_id == $user->id) {
-        // L'acheteur envoie → au vendeur
-        $receiverId = $conversation->company->user_id;
-    } else {
-        // Le vendeur envoie → à l'acheteur
-        $receiverId = $conversation->user_id;
+        // ─────────────────────────────────────────────
+        // 2. Calculer le destinataire (users.id)
+        // ─────────────────────────────────────────────
+        if ($conversation->user_id == $user->id) {
+            // L'acheteur envoie → au vendeur
+            $receiverId = $conversation->company->user_id ?? null;
+        } else {
+            // Le vendeur envoie → à l'acheteur
+            $receiverId = $conversation->user_id;
+        }
+
+        if (!$receiverId) {
+            return response()->json([
+                'error' => 'Destinataire introuvable',
+            ], 422);
+        }
+
+        // ─────────────────────────────────────────────
+        // 3. Créer le message
+        // ─────────────────────────────────────────────
+        $msg = Message::create([
+            'conversation_id' => $conversation->id,
+            'sender_id'       => $user->id,
+            'receiver_id'     => $receiverId,
+            'content'         => $request->content,
+            'type'            => 'text',
+        ]);
+
+        $conversation->update([
+            'last_message' => $msg->content,
+            'last_at'      => now(),
+        ]);
+
+        // ─────────────────────────────────────────────
+        // 4. Charger les relations
+        // ─────────────────────────────────────────────
+        $msg->load('sender');
+
+        // ─────────────────────────────────────────────
+        // 5. 🔔 Notifications (FCM + Reverb)
+        // ─────────────────────────────────────────────
+        $receiver = \App\Models\User::find($receiverId);
+
+        if ($receiver) {
+            $title = $user->name ?? 'Masasugu';
+            $body  = mb_strlen($msg->content) > 120
+                ? mb_substr($msg->content, 0, 120) . '...'
+                : $msg->content;
+
+            $notifData = [
+                'type'            => 'message',
+                'conversation_id' => (string) $conversation->id,
+                'sender_id'       => (string) $user->id,
+                'receiver_id'     => (string) $receiverId,
+                'content'         => (string) $msg->content,
+                'sender_name'     => (string) ($user->name ?? 'Masasugu'),
+            ];
+
+            // 5.a — FCM (fonctionne app fermée)
+            try {
+                $fcm = new FcmService();
+                $fcm->sendToUser($receiver, $title, $body, $notifData);
+                Log::info('✅ FCM envoyé au destinataire ID: ' . $receiverId);
+            } catch (\Exception $e) {
+                Log::warning('⚠️ Erreur FCM: ' . $e->getMessage());
+            }
+
+            // 5.b — Reverb (temps réel app ouverte)
+            try {
+                broadcast(new MessageSent($msg));
+                Log::info('✅ Broadcast Reverb envoyé');
+            } catch (\Exception $e) {
+                Log::warning('⚠️ Erreur broadcast: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json($msg, 201);
     }
-
-    if (!$receiverId) {
-        return response()->json([
-            'error' => 'Destinataire introuvable',
-        ], 422);
-    }
-
-    $msg = Message::create([
-        'conversation_id' => $conversation->id,
-        'sender_id'       => $user->id,
-        'receiver_id'     => $receiverId,   // ✅ Toujours un users.id
-        'content'         => $request->content,
-        'type'            => 'text',
-    ]);
-
-    $conversation->update([
-        'last_message' => $msg->content,
-        'last_at'      => now(),
-    ]);
-
-    // 🔔 Broadcast SANS toOthers (le vendeur DOIT recevoir)
-    broadcast(new MessageSent($msg));
-
-    return response()->json($msg, 201);
-}
 
     /**
  * 📎 Upload d'une pièce jointe (image, vidéo, fichier)

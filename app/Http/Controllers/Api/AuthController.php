@@ -50,6 +50,22 @@ class AuthController extends Controller
         ]);
     }
 
+    public function saveFcmToken(Request $request)
+    {
+        $request->validate([
+            'fcm_token' => 'required|string',
+            'platform' => 'nullable|in:android,ios',
+        ]);
+
+        $user = $request->user();
+        $user->update([
+            'fcm_token' => $request->fcm_token,
+            'fcm_platform' => $request->platform,
+        ]);
+
+        return response()->json(['success' => true]);
+    }
+
     public function user(Request $request)
     {
         return response()->json($request->user());

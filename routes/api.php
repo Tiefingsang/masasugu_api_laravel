@@ -64,6 +64,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
 
+    Route::post('/user/fcm-token', [AuthController::class, 'saveFcmToken']);
+
 
     //products routes
     Route::post('/products', [ProductController::class, 'store']);

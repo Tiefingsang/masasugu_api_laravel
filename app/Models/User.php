@@ -40,6 +40,8 @@ class User extends Authenticatable
         'email_verified_at',
         'last_login_at',
         'last_login_ip',
+        'fcm_token',
+        'fcm_platform',
     ];
 
     /**
@@ -50,6 +52,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'fcm_token',
     ];
 
     /**
@@ -79,7 +82,7 @@ class User extends Authenticatable
         return $this->hasOne(Company::class);
     }
 
-    
+
 
     /**
      * Détermine si l’utilisateur est administrateur.
