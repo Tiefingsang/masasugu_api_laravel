@@ -14,6 +14,9 @@ use App\Services\FcmService;
 
 class OrderController extends Controller
 {
+    // ═══════════════════════════════════════════════════════════
+    // 🛍️ CRÉER UNE COMMANDE (déjà en place)
+    // ═══════════════════════════════════════════════════════════
     public function store(Request $request)
     {
         try {
@@ -90,11 +93,15 @@ class OrderController extends Controller
             // 6. Charger les relations
             $order->load('items.product', 'user');
 
-            // 7. Trouver le vendeur
+            // 7. Trouver le vendeur (recherche robuste multi-fallback)
+            $seller = null;
+
+            // 7a. Par role dans la company
             $seller = \App\Models\User::where('company_id', $firstCompanyId)
-                ->where('role', 'seller')
+                ->whereIn('role', ['seller', 'vendeur', 'admin', 'owner'])
                 ->first();
 
+            // 7b. Par user_id du premier produit
             if (!$seller) {
                 $firstProduct = $itemsData[0]['product'] ?? null;
                 if ($firstProduct && $firstProduct->user_id) {
@@ -102,26 +109,30 @@ class OrderController extends Controller
                 }
             }
 
-            // 8. Notifications (FCM + Reverb)
+            // 7c. Par owner de la company
+            if (!$seller) {
+                $company = \App\Models\Company::find($firstCompanyId);
+                if ($company && $company->user_id) {
+                    $seller = \App\Models\User::find($company->user_id);
+                }
+            }
+
+            // 7d. Dernier recours
+            if (!$seller) {
+                $seller = \App\Models\User::where('company_id', $firstCompanyId)->first();
+            }
+
+            Log::info('Vendeur trouve', [
+                'seller_id' => $seller ? $seller->id : null,
+                'has_fcm'   => $seller ? !empty($seller->fcm_token) : false,
+            ]);
+
+            // 8. Notifications au vendeur
             if ($seller) {
-                $productName = $itemsData[0]['product']->name ?? 'Produit';
-                $title = '🛍️ Nouvelle commande';
-                $body  = "{$user->name} a commandé : {$productName}";
-
-                $notifData = [
-                    'type'          => 'order',
-                    'order_id'      => (string) $order->id,
-                    'total'         => (string) $order->total,
-                    'currency'      => 'XOF',
-                    'customer_name' => (string) $user->name,
-                    'product_name'  => (string) $productName,
-                    'product_image' => (string) ($itemsData[0]['product']->main_image ?? ''),
-                    'reference'     => '#' . $order->id,
-                ];
-
                 try {
                     $fcm = new FcmService();
-                    $fcm->sendToUser($seller, $title, $body, $notifData);
+                    $fcm->notifyNewOrder($order, $seller, $user);
+                    Log::info('✅ FCM envoyé au vendeur');
                 } catch (\Exception $e) {
                     Log::warning('⚠️ Erreur FCM: ' . $e->getMessage());
                 }
@@ -144,6 +155,9 @@ class OrderController extends Controller
         }
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // 📋 LISTE DES COMMANDES
+    // ═══════════════════════════════════════════════════════════
     public function index(Request $request)
     {
         $user = Auth::user();
@@ -172,12 +186,15 @@ class OrderController extends Controller
         return response()->json(['orders' => $orders]);
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // 🔄 CHANGEMENT DE STATUT + NOTIFICATION
+    // ═══════════════════════════════════════════════════════════
     public function updateStatus(Request $request, $id)
     {
-        $order = Order::findOrFail($id);
+        $order = Order::with(['user', 'items.product'])->findOrFail($id);
 
         $validated = $request->validate([
-            'status' => 'required|in:pending,confirmed,delivered,cancelled,en_attente,confirmee,livree,annulee',
+            'status' => 'required|in:pending,confirmed,delivered,cancelled,en_attente,confirmee,livree,annulee,expediee',
         ]);
 
         $map = [
@@ -187,8 +204,47 @@ class OrderController extends Controller
             'cancelled' => 'annulee',
         ];
 
-        $order->status = $map[$validated['status']] ?? $validated['status'];
+        $newStatus = $map[$validated['status']] ?? $validated['status'];
+        $oldStatus = $order->status;
+
+        // Ne rien faire si le statut n'a pas changé
+        if ($oldStatus === $newStatus) {
+            return response()->json([
+                'message' => 'Statut inchangé',
+                'order'   => $order,
+            ]);
+        }
+
+        $order->status = $newStatus;
         $order->save();
+
+        // 🔔 Notification à l'acheteur selon le nouveau statut
+        try {
+            $fcm = new FcmService();
+
+            switch ($newStatus) {
+                case 'confirmee':
+                    $fcm->notifyOrderConfirmed($order);
+                    break;
+                case 'expediee':
+                    $fcm->notifyOrderShipped($order);
+                    break;
+                case 'livree':
+                    $fcm->notifyOrderDelivered($order);
+                    break;
+                case 'annulee':
+                    $fcm->notifyOrderCancelled($order);
+                    break;
+            }
+
+            Log::info('Statut commande change + FCM', [
+                'order_id'   => $order->id,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('⚠️ Erreur FCM statut: ' . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Statut mis à jour',
@@ -196,6 +252,9 @@ class OrderController extends Controller
         ]);
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // 📊 STATISTIQUES
+    // ═══════════════════════════════════════════════════════════
     public function getSoldProducts($shopId)
     {
         $orders = Order::with('items.product')
@@ -239,12 +298,15 @@ class OrderController extends Controller
         return response()->json(array_values($clients));
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // 🗑️ SUPPRESSION + NOTIFICATION
+    // ═══════════════════════════════════════════════════════════
     public function destroy($id)
     {
         $user = Auth::user();
         if (!$user) return response()->json(['message' => 'Non authentifié'], 401);
 
-        $order = Order::findOrFail($id);
+        $order = Order::with(['user'])->findOrFail($id);
 
         if ($order->user_id !== $user->id) {
             return response()->json(['message' => 'Non autorisé'], 403);
@@ -254,7 +316,17 @@ class OrderController extends Controller
             return response()->json(['message' => 'Seules les commandes annulées peuvent être supprimées'], 400);
         }
 
+        // 🔔 Notification à l'acheteur avant suppression
+        try {
+            $fcm = new FcmService();
+            $fcm->notifyOrderDeleted($order);
+            Log::info('FCM suppression commande', ['order_id' => $order->id]);
+        } catch (\Exception $e) {
+            Log::warning('⚠️ Erreur FCM suppression: ' . $e->getMessage());
+        }
+
         $order->delete();
+
         return response()->json(['message' => 'Commande supprimée avec succès']);
     }
 }

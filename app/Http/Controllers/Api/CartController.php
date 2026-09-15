@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Notifications\ProductAddedToCartNotification;
 //use Illuminate\Notifications\Messages\BroadcastMessage;
 use App\Models\User;
+use Illuminate\Support\Facades\Log; 
 
 
 
@@ -18,9 +19,9 @@ use App\Models\User;
 class CartController extends Controller
 {
 
-    
-    // Ajouter un produit au panier
-    public function addToCart(Request $request){
+
+        public function addToCart(Request $request)
+    {
         $validated = $request->validate([
             'product_id' => 'required|exists:products,id',
             'quantity'   => 'nullable|integer|min:1',
@@ -29,26 +30,24 @@ class CartController extends Controller
         $user = Auth::user();
         $product = Product::findOrFail($validated['product_id']);
 
-        //  Récupérer la boutique du produit
+        // Récupérer la boutique du produit
         $companyId = $product->company_id;
 
-        //  Calcul du prix unitaire et total
+        // Calcul du prix
         $unitPrice = $product->discount_price ?? $product->price;
         $quantity = $validated['quantity'] ?? 1;
         $totalPrice = $unitPrice * $quantity;
 
-        //  Vérifier si le produit est déjà dans le panier
+        // Vérifier si le produit est déjà dans le panier
         $cartItem = Cart::where('user_id', $user->id)
                         ->where('product_id', $product->id)
                         ->first();
 
         if ($cartItem) {
-            //  Met à jour la quantité et le total
             $cartItem->quantity += $quantity;
             $cartItem->total_price = $cartItem->quantity * $unitPrice;
             $cartItem->save();
         } else {
-            //  Crée une nouvelle entrée dans le panier
             $cartItem = Cart::create([
                 'user_id' => $user->id,
                 'product_id' => $product->id,
@@ -60,30 +59,56 @@ class CartController extends Controller
             ]);
         }
 
-        /* event(new ProductAddedToCart(
-            product: $cartItem->product,
-            sellerId: $cartItem->product->company_id
-        )); */
-        $seller = User::where('company_id', $companyId)
-            ->where('role', 'seller')
+        // ═══════════════════════════════════════════════
+        // 🔔 NOTIFICATIONS AU VENDEUR
+        // ═══════════════════════════════════════════════
+        $seller = \App\Models\User::where('company_id', $companyId)
+            ->whereIn('role', ['seller', 'vendeur', 'admin'])
             ->first();
 
-        if ($seller) {
-            $seller->notify(
-                new ProductAddedToCartNotification([
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'quantity' => $quantity,
-                ])
-            );
+        // Fallback : user_id du produit
+        if (!$seller && $product->user_id) {
+            $seller = \App\Models\User::find($product->user_id);
         }
 
-        /* event(new ProductAddedToCart(
-            product: $cartItem->product,
-            sellerId: $companyId
-        ));
- */
+        if ($seller) {
+            // ─── 1. Laravel Notification (Reverb, app ouverte)
+            try {
+                $seller->notify(
+                    new ProductAddedToCartNotification([
+                        'product_id'   => $product->id,
+                        'product_name' => $product->name,
+                        'quantity'     => $quantity,
+                    ])
+                );
+                Log::info('Notification Laravel envoyée au vendeur ID: ' . $seller->id);
+            } catch (\Exception $e) {
+                Log::warning('⚠️ Erreur Laravel Notif: ' . $e->getMessage());
+            }
 
+            // ─── 2. FCM (app fermée) ⭐ NOUVEAU
+            try {
+                $fcm = new \App\Services\FcmService();
+                $fcm->sendToUser(
+                    $seller,
+                    '🛒 Nouveau panier',
+                    $user->name . ' a ajouté : ' . $product->name,
+                    [
+                        'type'          => 'cart',
+                        'product_id'    => (string) $product->id,
+                        'product_name'  => (string) $product->name,
+                        'product_image' => (string) ($product->main_image ?? ''),
+                        'quantity'      => (string) $quantity,
+                        'customer_name' => (string) $user->name,
+                        'price'         => (string) $unitPrice,
+                        'currency'      => (string) ($product->currency ?? 'XOF'),
+                    ]
+                );
+                Log::info('✅ FCM panier envoyé au vendeur ID: ' . $seller->id);
+            } catch (\Exception $e) {
+                Log::warning('⚠️ Erreur FCM panier: ' . $e->getMessage());
+            }
+        }
 
         return response()->json([
             'message' => '✅ Produit ajouté au panier avec succès.',

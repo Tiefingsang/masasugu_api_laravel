@@ -12,20 +12,7 @@ use Illuminate\Support\Facades\Log;
 use App\Services\FcmService;
 
 class ChatController extends Controller{
-    // Liste conversations de l'utilisateur (client) ou de la boutique (vendeur)
-    /* public function index(){
-        $user = Auth::user();
 
-        if ($user->isSeller() && $user->company) {
-            return Conversation::where('company_id', $user->company->id)
-                ->orderByDesc('last_at')
-                ->get();
-        }
-
-        return Conversation::where('user_id', $user->id)
-            ->orderByDesc('last_at')
-            ->get();
-    } */
 
     public function index(){
         $user = Auth::user();
@@ -347,64 +334,107 @@ class ChatController extends Controller{
     //     return response()->json($msg, 201);
     // }
 
-    public function upload(Request $request)
-{
-    $request->validate([
-        'conversation_id' => 'required|exists:conversations,id',
-        'file'            => 'required|file|max:10240',
-        'type'            => 'required|in:image,video,file,audio',
-        'caption'         => 'nullable|string|max:500',
-    ]);
+        public function upload(Request $request)
+    {
+        $request->validate([
+            'conversation_id' => 'required|exists:conversations,id',
+            'file'            => 'required|file|max:10240',
+            'type'            => 'required|in:image,video,file,audio',
+            'caption'         => 'nullable|string|max:500',
+        ]);
 
-    $user = Auth::user();
-    $conversation = Conversation::with('company.user')->findOrFail($request->conversation_id);
+        $user = Auth::user();
+        $conversation = Conversation::with('company.user')->findOrFail($request->conversation_id);
 
-    // ✅ Même calcul côté backend
-    if ($conversation->user_id == $user->id) {
-        $receiverId = $conversation->company->user_id;
-    } else {
-        $receiverId = $conversation->user_id;
+        // ✅ Calcul du destinataire
+        if ($conversation->user_id == $user->id) {
+            $receiverId = $conversation->company->user_id ?? null;
+        } else {
+            $receiverId = $conversation->user_id;
+        }
+
+        if (!$receiverId) {
+            return response()->json(['error' => 'Destinataire introuvable'], 422);
+        }
+
+        $folder = match ($request->type) {
+            'image' => 'chat/images',
+            'video' => 'chat/videos',
+            'audio' => 'chat/audios',
+            default => 'chat/files',
+        };
+
+        $file = $request->file('file');
+        $path = $file->store($folder, 'public');
+
+        $msg = Message::create([
+            'conversation_id' => $conversation->id,
+            'sender_id'       => $user->id,
+            'receiver_id'     => $receiverId,
+            'content'         => $request->caption ?? '',
+            'type'            => $request->type,
+            'metadata'        => [
+                'path' => $path,
+                'url'  => asset('storage/' . $path),
+                'name' => $file->getClientOriginalName(),
+                'size' => $file->getSize(),
+                'mime' => $file->getMimeType(),
+            ],
+        ]);
+
+        $conversation->update([
+            'last_message' => $request->caption ?? "📎 Pièce jointe",
+            'last_at'      => now(),
+        ]);
+
+        $msg->load('sender');
+
+        // ─────────────────────────────────────────────
+        // 🔔 Notifications FCM + Reverb
+        // ─────────────────────────────────────────────
+        $receiver = \App\Models\User::find($receiverId);
+
+        if ($receiver) {
+            $title = $user->name ?? 'Masasugu';
+
+            // Corps selon le type
+            $body = match ($request->type) {
+                'image' => '📸 Photo' . ($request->caption ? ' : ' . $request->caption : ''),
+                'video' => '🎥 Vidéo' . ($request->caption ? ' : ' . $request->caption : ''),
+                'audio' => '🎵 Audio' . ($request->caption ? ' : ' . $request->caption : ''),
+                default => '📎 Fichier' . ($request->caption ? ' : ' . $request->caption : ''),
+            };
+
+            $notifData = [
+                'type'            => 'message',
+                'conversation_id' => (string) $conversation->id,
+                'sender_id'       => (string) $user->id,
+                'receiver_id'     => (string) $receiverId,
+                'content'         => (string) ($request->caption ?? ''),
+                'sender_name'     => (string) ($user->name ?? 'Masasugu'),
+                'attachment_type' => (string) $request->type,
+                'attachment_url'  => (string) asset('storage/' . $path),
+            ];
+
+            // FCM
+            try {
+                $fcm = new FcmService();
+                $fcm->sendToUser($receiver, $title, $body, $notifData);
+                Log::info('✅ FCM envoyé (pièce jointe) au destinataire ID: ' . $receiverId);
+            } catch (\Exception $e) {
+                Log::warning('⚠️ Erreur FCM upload: ' . $e->getMessage());
+            }
+
+            // Reverb
+            try {
+                broadcast(new MessageSent($msg));
+            } catch (\Exception $e) {
+                Log::warning('⚠️ Erreur broadcast upload: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json($msg, 201);
     }
-
-    if (!$receiverId) {
-        return response()->json(['error' => 'Destinataire introuvable'], 422);
-    }
-
-    $folder = match ($request->type) {
-        'image' => 'chat/images',
-        'video' => 'chat/videos',
-        'audio' => 'chat/audios',
-        default => 'chat/files',
-    };
-
-    $file = $request->file('file');
-    $path = $file->store($folder, 'public');
-
-    $msg = Message::create([
-        'conversation_id' => $conversation->id,
-        'sender_id'       => $user->id,
-        'receiver_id'     => $receiverId,   // ✅
-        'content'         => $request->caption ?? '',
-        'type'            => $request->type,
-        'metadata'        => [
-            'path' => $path,
-            'url'  => asset('storage/' . $path),
-            'name' => $file->getClientOriginalName(),
-            'size' => $file->getSize(),
-            'mime' => $file->getMimeType(),
-        ],
-    ]);
-
-    $conversation->update([
-        'last_message' => $request->caption ?? "📎 Pièce jointe",
-        'last_at'      => now(),
-    ]);
-
-    // ✅ Sans toOthers
-    broadcast(new MessageSent($msg));
-
-    return response()->json($msg, 201);
-}
 
 
     public function markAsRead($conversationId){

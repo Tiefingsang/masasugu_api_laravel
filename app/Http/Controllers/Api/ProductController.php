@@ -212,10 +212,23 @@ class ProductController extends Controller
             $product->update(['main_image' => $path]);
         }
 
+                // 🔔 Notifier tous les acheteurs du nouveau produit
+        try {
+            $fcm = new \App\Services\FcmService();
+            $count = $fcm->notifyNewProduct($product, $user->id);
+            \Log::info('Nouveau produit annonce', [
+                'product_id' => $product->id,
+                'notified'   => $count,
+            ]);
+        } catch (\Exception $e) {
+            \Log::warning('Erreur FCM nouveau produit: ' . $e->getMessage());
+        }
+
         return response()->json([
             'message' => '✅ Produit créé avec succès',
             'product' => $product,
         ], 201);
+    
     }
 
 
