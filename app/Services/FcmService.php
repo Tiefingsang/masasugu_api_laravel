@@ -7,6 +7,7 @@ use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Messaging\Notification;
 use Kreait\Firebase\Messaging\AndroidConfig;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 
 class FcmService
 {
