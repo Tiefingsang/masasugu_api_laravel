@@ -14,16 +14,20 @@ class FcmService
 
     public function __construct()
     {
-        $factory = (new Factory)
-            ->withServiceAccount(storage_path('app/firebase-credentials.json'));
+        $credentialsPath = storage_path('app/firebase-credentials.json');
 
+        if (!file_exists($credentialsPath)) {
+            throw new \Exception('firebase-credentials.json introuvable dans storage/app/');
+        }
+
+        $factory = (new Factory)->withServiceAccount($credentialsPath);
         $this->messaging = $factory->createMessaging();
     }
 
     /**
      * Envoyer une notification à un utilisateur
      */
-    public function sendToUser($user, string $title, string $body, array $data = [])
+    public function sendToUser($user, string $title, string $body, array $data = []): bool
     {
         if (empty($user->fcm_token)) {
             Log::warning("⚠️ User {$user->id} n'a pas de token FCM");
@@ -31,18 +35,20 @@ class FcmService
         }
 
         try {
-            // Convertir toutes les valeurs en string (FCM exige string)
+            // FCM exige que toutes les valeurs de `data` soient des strings
             $stringData = array_map(fn($v) => (string) $v, $data);
 
-            $message = CloudMessage::withTarget('token', $user->fcm_token)
+            // ✅ Version 8.x : utiliser CloudMessage::new() PUIS withTarget()
+            $message = CloudMessage::new()
+                ->withTarget('token', $user->fcm_token)
                 ->withNotification(Notification::create($title, $body))
                 ->withData($stringData)
                 ->withAndroidConfig(
                     AndroidConfig::fromArray([
                         'priority' => 'high',
                         'notification' => [
-                            'channel_id' => 'masasugu_high_importance',
-                            'sound' => 'default',
+                            'channel_id'   => 'masasugu_high_importance',
+                            'sound'        => 'default',
                             'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
                         ],
                     ])
@@ -58,7 +64,7 @@ class FcmService
         } catch (\Exception $e) {
             Log::error("❌ FCM erreur: " . $e->getMessage(), [
                 'user_id' => $user->id,
-                'token' => $user->fcm_token,
+                'token'   => substr($user->fcm_token, 0, 20) . '...',
             ]);
             return false;
         }
@@ -67,7 +73,7 @@ class FcmService
     /**
      * Envoyer à plusieurs utilisateurs
      */
-    public function sendToUsers($users, string $title, string $body, array $data = [])
+    public function sendToUsers($users, string $title, string $body, array $data = []): void
     {
         foreach ($users as $user) {
             $this->sendToUser($user, $title, $body, $data);
