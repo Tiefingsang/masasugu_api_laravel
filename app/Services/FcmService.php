@@ -7,7 +7,6 @@ use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Messaging\Notification;
 use Kreait\Firebase\Messaging\AndroidConfig;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\URL;
 
 class FcmService
 {
@@ -31,17 +30,16 @@ class FcmService
     public function sendToUser($user, string $title, string $body, array $data = []): bool
     {
         if (empty($user->fcm_token)) {
-            Log::warning("⚠️ User {$user->id} n'a pas de token FCM");
+            Log::warning("User {$user->id} n'a pas de token FCM");
             return false;
         }
 
         try {
-            // FCM exige que toutes les valeurs de `data` soient des strings
             $stringData = array_map(fn($v) => (string) $v, $data);
 
-            // ✅ Version 8.x : utiliser CloudMessage::new() PUIS withTarget()
+            // Version 8.x : CloudMessage::new() + withToken()
             $message = CloudMessage::new()
-                ->withTarget('token', $user->fcm_token)
+                ->withToken($user->fcm_token)
                 ->withNotification(Notification::create($title, $body))
                 ->withData($stringData)
                 ->withAndroidConfig(
@@ -57,13 +55,10 @@ class FcmService
 
             $this->messaging->send($message);
 
-            Log::info("✅ FCM envoyé à user {$user->id}", [
-                'title' => $title,
-            ]);
-
+            Log::info("FCM envoye a user {$user->id}", ['title' => $title]);
             return true;
         } catch (\Exception $e) {
-            Log::error("❌ FCM erreur: " . $e->getMessage(), [
+            Log::error("FCM erreur: " . $e->getMessage(), [
                 'user_id' => $user->id,
                 'token'   => substr($user->fcm_token, 0, 20) . '...',
             ]);
