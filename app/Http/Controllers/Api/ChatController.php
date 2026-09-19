@@ -11,19 +11,23 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use App\Services\FcmService;
 
-class ChatController extends Controller{
-
-
-    public function index(){
+class ChatController extends Controller
+{
+    // ═══════════════════════════════════════════════════════════
+    // 📋 LISTE DES CONVERSATIONS
+    // ✅ CORRIGÉ : filtre par receiver_id dans messages
+    // ═══════════════════════════════════════════════════════════
+    public function index()
+    {
         $user = Auth::user();
 
         $conversations = Conversation::with([
             'user',
             'company.user',
-            'messages' => function ($q) {
-                $q->whereNull('read_at');
+            'messages' => function ($q) use ($user) {   // ✅ use ($user)
+                $q->where('receiver_id', $user->id)      // ✅ NOUVEAU
+                  ->whereNull('read_at');
             }
-
         ])
         ->where(function ($q) use ($user) {
             if ($user->isSeller() && $user->company) {
@@ -37,7 +41,6 @@ class ChatController extends Controller{
 
         return response()->json(
             $conversations->map(function ($c) use ($user) {
-
                 $isSeller = $user->isSeller();
 
                 $receiver = $isSeller
@@ -51,16 +54,19 @@ class ChatController extends Controller{
                     'last_message' => $c->last_message,
                     'last_at' => $c->last_at,
                     'receiver_id' => $receiver->id,
-                    'unread_count' => $c->messages->count(),
+                    'unread_count' => $c->messages->count(),   // ✅ Maintenant = messages reçus non lus
                 ];
             })
         );
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // 🆕 CRÉER OU RÉCUPÉRER UNE CONVERSATION
+    // ═══════════════════════════════════════════════════════════
+    public function createOrGetConversation(Request $request)
+    {
+        Log::info(['request' => $request->all()]);
 
-
-     public function createOrGetConversation(Request $request){
-        Log::info(array('request'=> $request->all()));
         $request->validate([
             'receiver_id' => 'required|exists:companies,id',
         ]);
@@ -81,114 +87,28 @@ class ChatController extends Controller{
             ]);
         }
 
-        return response()->json($conversation, $conversation->wasRecentlyCreated ? 201 : 200);
-
-
-        //return response()->json($conversation, 201);
+        return response()->json(
+            $conversation,
+            $conversation->wasRecentlyCreated ? 201 : 200
+        );
     }
-   /*  public function createOrGetConversation(Request $request){
-        $request->validate([
-            'receiver_id' => 'required|exists:companies,id',
-        ]);
 
-        return response()->json([
-            'ok' => true,
-            'receiver_id' => $request->receiver_id,
-        ], 200);
-    } */
-
-        /* public function createOrGetConversation(Request $request){
-            \Log::info('headers', $request->headers->all());
-            \Log::info('all', $request->all());
-
-            return response()->json([
-                'ok' => true,
-                'data' => $request->all(),
-            ], 200);
-        } */
-
-
-
-
-
-    // Récupérer messages d'une conversation
-    public function messages($conversationId){
+    // ═══════════════════════════════════════════════════════════
+    // 💬 MESSAGES D'UNE CONVERSATION
+    // ═══════════════════════════════════════════════════════════
+    public function messages($conversationId)
+    {
         $conversation = Conversation::with(['messages.sender'])
             ->findOrFail($conversationId);
 
         return response()->json($conversation->messages);
     }
 
-
-    // Envoyer message
-    /* public function send(Request $request){
-        $request->validate([
-            'conversation_id' => 'required|exists:conversations,id',
-            'content' => 'required|string',
-        ]);
-
-        $user = Auth::user();
-        $conversation = Conversation::with('company.user')
-            ->findOrFail($request->conversation_id);
-
-        $receiverId = $conversation->user_id == $user->id
-            ? $conversation->company->user_id
-            : $conversation->user_id;
-
-        $msg = Message::create([
-            'conversation_id' => $conversation->id,
-            'sender_id' => $user->id,
-            'receiver_id' => $receiverId,
-            'content' => $request->content,
-            'type' => 'text',
-        ]);
-
-        $conversation->update([
-            'last_message' => $msg->content,
-            'last_at' => now(),
-        ]);
-
-        broadcast(new MessageSent($msg))->toOthers();
-
-        return response()->json($msg, 201);
-    } */
-
-    // public function send(Request $request){
-    //     $request->validate([
-    //         'conversation_id' => 'required|exists:conversations,id',
-    //         'content' => 'required|string',
-    //         'receiver_id' => 'required|exists:users,id',
-    //     ]);
-
-    //     $user = Auth::user();
-
-    //     $conversation = Conversation::findOrFail($request->conversation_id);
-
-    //     $msg = Message::create([
-    //         'conversation_id' => $conversation->id,
-    //         'sender_id' => $user->id,
-    //         'receiver_id' => $request->receiver_id,
-    //         'content' => $request->content,
-    //         'type' => 'text',
-    //     ]);
-
-    //     $conversation->update([
-    //         'last_message' => $msg->content,
-    //         'last_at' => now(),
-    //     ]);
-
-    //     broadcast(new MessageSent($msg))->toOthers();
-
-    //     //return response()->json(['message' => $msg], 201);
-    //     return response()->json($msg, 201);
-
-    // }
-
-   public function send(Request $request)
+    // ═══════════════════════════════════════════════════════════
+    // 📤 ENVOYER UN MESSAGE
+    // ═══════════════════════════════════════════════════════════
+    public function send(Request $request)
     {
-        // ─────────────────────────────────────────────
-        // 1. Validation
-        // ─────────────────────────────────────────────
         $request->validate([
             'conversation_id' => 'required|exists:conversations,id',
             'content'         => 'required|string',
@@ -198,26 +118,17 @@ class ChatController extends Controller{
         $conversation = Conversation::with('company.user')
             ->findOrFail($request->conversation_id);
 
-        // ─────────────────────────────────────────────
-        // 2. Calculer le destinataire (users.id)
-        // ─────────────────────────────────────────────
+        // Calculer le destinataire (users.id)
         if ($conversation->user_id == $user->id) {
-            // L'acheteur envoie → au vendeur
             $receiverId = $conversation->company->user_id ?? null;
         } else {
-            // Le vendeur envoie → à l'acheteur
             $receiverId = $conversation->user_id;
         }
 
         if (!$receiverId) {
-            return response()->json([
-                'error' => 'Destinataire introuvable',
-            ], 422);
+            return response()->json(['error' => 'Destinataire introuvable'], 422);
         }
 
-        // ─────────────────────────────────────────────
-        // 3. Créer le message
-        // ─────────────────────────────────────────────
         $msg = Message::create([
             'conversation_id' => $conversation->id,
             'sender_id'       => $user->id,
@@ -231,14 +142,9 @@ class ChatController extends Controller{
             'last_at'      => now(),
         ]);
 
-        // ─────────────────────────────────────────────
-        // 4. Charger les relations
-        // ─────────────────────────────────────────────
         $msg->load('sender');
 
-        // ─────────────────────────────────────────────
-        // 5. 🔔 Notifications (FCM + Reverb)
-        // ─────────────────────────────────────────────
+        // 🔔 Notifications
         $receiver = \App\Models\User::find($receiverId);
 
         if ($receiver) {
@@ -256,7 +162,6 @@ class ChatController extends Controller{
                 'sender_name'     => (string) ($user->name ?? 'Masasugu'),
             ];
 
-            // 5.a — FCM (fonctionne app fermée)
             try {
                 $fcm = new FcmService();
                 $fcm->sendToUser($receiver, $title, $body, $notifData);
@@ -265,7 +170,6 @@ class ChatController extends Controller{
                 Log::warning('⚠️ Erreur FCM: ' . $e->getMessage());
             }
 
-            // 5.b — Reverb (temps réel app ouverte)
             try {
                 broadcast(new MessageSent($msg));
                 Log::info('✅ Broadcast Reverb envoyé');
@@ -277,64 +181,10 @@ class ChatController extends Controller{
         return response()->json($msg, 201);
     }
 
-    /**
- * 📎 Upload d'une pièce jointe (image, vidéo, fichier)
- * Le fichier est stocké dans `storage/app/public/chat/{type}/`
- * Les métadonnées sont stockées dans la colonne `metadata` (JSON).
- */
-    // public function upload(Request $request)
-    // {
-    //     $request->validate([
-    //         'conversation_id' => 'required|exists:conversations,id',
-    //         'receiver_id'     => 'required|exists:users,id',
-    //         'file'            => 'required|file|max:10240',
-    //         'type'            => 'required|in:image,video,file,audio',
-    //         'caption'         => 'nullable|string|max:500',
-    //     ]);
-
-    //     $user = Auth::user();
-    //     $conversation = Conversation::findOrFail($request->conversation_id);
-
-    //     // Dossier selon le type
-    //     $folder = match ($request->type) {
-    //         'image' => 'chat/images',
-    //         'video' => 'chat/videos',
-    //         'audio' => 'chat/audios',
-    //         default => 'chat/files',
-    //     };
-
-    //     $file = $request->file('file');
-    //     $path = $file->store($folder, 'public');
-
-
-    //     $msg = Message::create([
-    //         'conversation_id' => $conversation->id,
-    //         'sender_id'       => $user->id,
-    //         'receiver_id'     => $request->receiver_id,
-    //         'content'         => $request->caption ?? '',
-    //         'type'            => $request->type,
-    //         'metadata'        => [
-    //             'path' => $path,
-    //             'url'  => asset('storage/' . $path),
-    //             'name' => $file->getClientOriginalName(),
-    //             'size' => $file->getSize(),
-    //             'mime' => $file->getMimeType(),
-    //         ],
-    //     ]);
-
-
-    //     $conversation->update([
-    //         'last_message' => $request->caption ?? "📎 Pièce jointe",
-    //         'last_at'      => now(),
-    //     ]);
-
-    //     // Broadcast temps réel
-    //     broadcast(new MessageSent($msg))->toOthers();
-
-    //     return response()->json($msg, 201);
-    // }
-
-        public function upload(Request $request)
+    // ═══════════════════════════════════════════════════════════
+    // 📎 UPLOAD PIÈCE JOINTE
+    // ═══════════════════════════════════════════════════════════
+    public function upload(Request $request)
     {
         $request->validate([
             'conversation_id' => 'required|exists:conversations,id',
@@ -344,9 +194,9 @@ class ChatController extends Controller{
         ]);
 
         $user = Auth::user();
-        $conversation = Conversation::with('company.user')->findOrFail($request->conversation_id);
+        $conversation = Conversation::with('company.user')
+            ->findOrFail($request->conversation_id);
 
-        // ✅ Calcul du destinataire
         if ($conversation->user_id == $user->id) {
             $receiverId = $conversation->company->user_id ?? null;
         } else {
@@ -389,15 +239,12 @@ class ChatController extends Controller{
 
         $msg->load('sender');
 
-        // ─────────────────────────────────────────────
-        // 🔔 Notifications FCM + Reverb
-        // ─────────────────────────────────────────────
+        // 🔔 Notifications
         $receiver = \App\Models\User::find($receiverId);
 
         if ($receiver) {
             $title = $user->name ?? 'Masasugu';
 
-            // Corps selon le type
             $body = match ($request->type) {
                 'image' => '📸 Photo' . ($request->caption ? ' : ' . $request->caption : ''),
                 'video' => '🎥 Vidéo' . ($request->caption ? ' : ' . $request->caption : ''),
@@ -416,7 +263,6 @@ class ChatController extends Controller{
                 'attachment_url'  => (string) asset('storage/' . $path),
             ];
 
-            // FCM
             try {
                 $fcm = new FcmService();
                 $fcm->sendToUser($receiver, $title, $body, $notifData);
@@ -425,7 +271,6 @@ class ChatController extends Controller{
                 Log::warning('⚠️ Erreur FCM upload: ' . $e->getMessage());
             }
 
-            // Reverb
             try {
                 broadcast(new MessageSent($msg));
             } catch (\Exception $e) {
@@ -436,8 +281,11 @@ class ChatController extends Controller{
         return response()->json($msg, 201);
     }
 
-
-    public function markAsRead($conversationId){
+    // ═══════════════════════════════════════════════════════════
+    // ✅ MARQUER COMME LU
+    // ═══════════════════════════════════════════════════════════
+    public function markAsRead($conversationId)
+    {
         $user = Auth::user();
 
         Message::where('conversation_id', $conversationId)
@@ -445,10 +293,11 @@ class ChatController extends Controller{
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
 
+        Log::info('✅ Messages marqués comme lus', [
+            'conversation_id' => $conversationId,
+            'user_id' => $user->id,
+        ]);
 
         return response()->json(['success' => true]);
     }
-
-
-
 }
