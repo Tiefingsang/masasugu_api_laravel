@@ -183,8 +183,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/conversations', [ChatController::class,'index']);
     Route::post('/conversations', [ChatController::class,'createOrGetConversation']); //
     Route::get('/conversations/{id}/messages', [ChatController::class,'messages']);
-    Route::post('/messages', [ChatController::class,'send']); //  harmonisé avec Flutter
+    Route::post('/messages', [ChatController::class,'send']); 
     Route::post('/messages/upload', [ChatController::class, 'upload']);
+    Route::post('/conversations/{id}/mark-as-read', [ChatController::class, 'markAsRead']);
 
 
 
