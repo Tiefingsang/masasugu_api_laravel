@@ -3,8 +3,6 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -16,19 +14,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // ✅ Définir le RateLimiter ICI (avant le middleware throttle:api)
-        RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute(60)->by(
-                $request->user()?->id ?: $request->ip()
-            );
+        // ✅ Pour les requêtes API, retourner 401 JSON au lieu de rediriger vers /login
+        $middleware->redirectGuestsTo(function (Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                abort(401, 'Unauthenticated.');
+            }
+            return route('login');
         });
-
-        // ✅ Groupe api avec throttle:api
-        $middleware->group('api', [
-            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
-            'throttle:api',
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
-        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
