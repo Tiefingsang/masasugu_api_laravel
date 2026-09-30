@@ -14,15 +14,16 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         channels: __DIR__.'/../routes/channels.php',
         health: '/up',
-
-        // ✅ Le RateLimiter est défini ici
-        then: function () {
-            RateLimiter::for('api', function (Request $request) {
-                return Limit::perMinute(60)->by($request->ip());
-            });
-        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // ✅ Définir le RateLimiter ICI (avant le middleware throttle:api)
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(60)->by(
+                $request->user()?->id ?: $request->ip()
+            );
+        });
+
+        // ✅ Groupe api avec throttle:api
         $middleware->group('api', [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             'throttle:api',
