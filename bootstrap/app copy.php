@@ -14,18 +14,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->alias([
-            'admin' => \App\Http\Middleware\EnsureIsAdmin::class,
-        ]);
-
+        // ✅ Pour les requêtes API, retourner 401 JSON au lieu de rediriger vers /login
         $middleware->redirectGuestsTo(function (Request $request) {
-            if ($request->is('admin/*') || $request->is('admin')) {
-                return route('admin.login');
-            }
             if ($request->is('api/*') || $request->expectsJson()) {
                 abort(401, 'Unauthenticated.');
             }
-            return route('admin.login');
+            return route('login');
         });
     })
     ->withExceptions(function (Exceptions $exceptions): void {

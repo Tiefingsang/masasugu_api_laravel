@@ -4,16 +4,14 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Company;
-use App\Models\Product;
-use App\Models\Order;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class ShopController extends Controller
 {
     /**
-     * 📋 LISTE DES BOUTIQUES
-     * Avec filtres (statut, actif, recherche)
+     * Liste des boutiques avec filtres et recherche
      */
     public function index(Request $request)
     {
@@ -24,7 +22,7 @@ class ShopController extends Controller
             $query->where('status', $request->status);
         }
 
-        // Filtre actif/suspendu
+        // Filtre par actif/inactif
         if ($request->filled('active')) {
             $query->where('is_active', $request->active === 'yes' ? 1 : 0);
         }
@@ -54,49 +52,33 @@ class ShopController extends Controller
     }
 
     /**
-     * 📄 DÉTAIL D'UNE BOUTIQUE
-     * Avec stats + produits + vendeur
+     * Détail d'une boutique
      */
     public function show($id)
     {
         $shop = Company::with([
             'user',
-            'category',
             'products' => function ($q) {
-                $q->latest()->limit(12);
+                $q->orderByDesc('created_at')->limit(20);
+            },
+            'orders' => function ($q) {
+                $q->orderByDesc('created_at')->limit(10);
             }
         ])->findOrFail($id);
 
-        // Statistiques (même logique que getShopStats de l'API)
-        $productsCount = Product::where('company_id', $shop->id)->count();
-
-        $orders = Order::whereHas('items.product', function ($q) use ($shop) {
-            $q->where('company_id', $shop->id);
-        })->get();
-
-        $ordersCount = $orders->count();
-        $totalSales = $orders->sum('total');
-        $clientsCount = $orders->pluck('user_id')->unique()->count();
-
-        // Commandes en attente
-        $pendingOrders = Order::whereHas('items.product', function ($q) use ($shop) {
-            $q->where('company_id', $shop->id);
-        })->where('status', 'pending')->count();
-
+        // Statistiques de la boutique
         $stats = [
-            'products_count' => $productsCount,
-            'orders_count' => $ordersCount,
-            'revenue' => $totalSales,
-            'clients_count' => $clientsCount,
-            'pending_orders' => $pendingOrders,
+            'products_count' => $shop->products()->count(),
+            'orders_count' => $shop->orders()->count(),
+            'revenue' => $shop->orders()->where('status', 'delivered')->sum('total') ?? 0,
+            'pending_orders' => $shop->orders()->where('status', 'pending')->count(),
         ];
 
         return view('admin.shops.show', compact('shop', 'stats'));
     }
 
     /**
-     * ✅ APPROUVER UNE BOUTIQUE
-     * status → approved, is_active → 1
+     * Approuver une boutique
      */
     public function approve($id)
     {
@@ -107,15 +89,7 @@ class ShopController extends Controller
             'is_active' => 1,
         ]);
 
-        // Met aussi à jour le user lié
-        if ($shop->user) {
-            $shop->user->update([
-                'role' => 'seller',
-                'company_id' => $shop->id,
-            ]);
-        }
-
-        Log::info("✅ Admin a approuvé la boutique #{$shop->id} ({$shop->name})");
+        Log::info("Admin a approuvé la boutique #{$shop->id} ({$shop->name})");
 
         return redirect()
             ->route('admin.shops.index')
@@ -123,8 +97,7 @@ class ShopController extends Controller
     }
 
     /**
-     * ❌ REFUSER UNE BOUTIQUE
-     * status → rejected, is_active → 0
+     * Refuser une boutique
      */
     public function reject(Request $request, $id)
     {
@@ -139,7 +112,7 @@ class ShopController extends Controller
             'is_active' => 0,
         ]);
 
-        Log::warning("❌ Admin a refusé la boutique #{$shop->id} - Raison: {$request->reason}");
+        Log::info("Admin a refusé la boutique #{$shop->id} ({$shop->name}) - Raison: {$request->reason}");
 
         return redirect()
             ->route('admin.shops.index')
@@ -147,8 +120,7 @@ class ShopController extends Controller
     }
 
     /**
-     * ⏸️ SUSPENDRE UNE BOUTIQUE
-     * is_active → 0 (sans changer le statut)
+     * Suspendre une boutique (sans changer son statut)
      */
     public function suspend($id)
     {
@@ -156,7 +128,7 @@ class ShopController extends Controller
 
         $shop->update(['is_active' => 0]);
 
-        Log::info("⏸️ Admin a suspendu la boutique #{$shop->id}");
+        Log::info("Admin a suspendu la boutique #{$shop->id} ({$shop->name})");
 
         return redirect()
             ->back()
@@ -164,8 +136,7 @@ class ShopController extends Controller
     }
 
     /**
-     * 🔓 RÉACTIVER UNE BOUTIQUE
-     * is_active → 1
+     * Réactiver une boutique suspendue
      */
     public function activate($id)
     {
@@ -173,7 +144,7 @@ class ShopController extends Controller
 
         $shop->update(['is_active' => 1]);
 
-        Log::info("🔓 Admin a réactivé la boutique #{$shop->id}");
+        Log::info("Admin a réactivé la boutique #{$shop->id} ({$shop->name})");
 
         return redirect()
             ->back()
@@ -181,7 +152,7 @@ class ShopController extends Controller
     }
 
     /**
-     * 👤 VÉRIFIER / DÉVÉRIFIER LE VENDEUR
+     * Vérifier le vendeur (badge vérifié)
      */
     public function verifyUser($id)
     {
@@ -193,38 +164,31 @@ class ShopController extends Controller
 
         $newStatus = !$shop->user->is_verified;
 
-        // Met à jour le user ET la boutique
         $shop->user->update(['is_verified' => $newStatus ? 1 : 0]);
+
+        // Met aussi à jour la boutique
         $shop->update(['is_verified' => $newStatus ? 1 : 0]);
 
-        Log::info("👤 Admin a " . ($newStatus ? 'vérifié' : 'dévérifié') . " le vendeur #{$shop->user->id}");
+        Log::info("Admin a " . ($newStatus ? 'vérifié' : 'dévérifié') . " le vendeur #{$shop->user->id}");
 
         $message = $newStatus
-            ? "✅ Le vendeur « {$shop->user->name} » a été vérifié."
+            ? "✅ Le vendeur a été vérifié."
             : "⚠️ Le vendeur a été dévérifié.";
 
         return redirect()->back()->with('success', $message);
     }
 
     /**
-     * 🗑️ SUPPRIMER UNE BOUTIQUE
+     * Supprimer une boutique
      */
     public function destroy($id)
     {
         $shop = Company::findOrFail($id);
         $name = $shop->name;
 
-        // Détache le user de la boutique
-        if ($shop->user) {
-            $shop->user->update([
-                'company_id' => null,
-                'role' => 'buyer',
-            ]);
-        }
+        Log::warning("Admin a supprimé la boutique #{$shop->id} ({$name})");
 
         $shop->delete();
-
-        Log::warning("🗑️ Admin a supprimé la boutique #{$id} ({$name})");
 
         return redirect()
             ->route('admin.shops.index')

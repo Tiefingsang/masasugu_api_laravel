@@ -96,6 +96,24 @@ class Company extends Model
         return $this->hasMany(Order::class);
     }
 
+        /**
+     * ✅ Accesseur : retourne l'URL complète du logo
+     */
+    public function getLogoUrlAttribute(): ?string
+    {
+        if (!$this->logo) {
+            return null;
+        }
+
+        // Si c'est déjà une URL absolue, la retourner telle quelle
+        if (str_starts_with($this->logo, 'http')) {
+            return $this->logo;
+        }
+
+        // Sinon, construire l'URL avec le storage
+        return 'https://api.masasugu.com/storage/' . ltrim($this->logo, '/');
+    }
+
     // app/Models/Company.php
 
 
