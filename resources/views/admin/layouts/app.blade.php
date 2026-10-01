@@ -21,26 +21,71 @@
                class="flex items-center px-4 py-3 rounded hover:bg-gray-800 {{ request()->routeIs('admin.dashboard') ? 'bg-orange-500 text-white' : 'text-gray-300' }}">
                 <i class="fas fa-home w-6"></i> Dashboard
             </a>
-            <a href="#" class="flex items-center px-4 py-3 rounded hover:bg-gray-800 text-gray-300">
-                <i class="fas fa-users w-6"></i> Utilisateurs
+            <a href="{{ route('admin.users.index') }}"
+                class="flex items-center px-4 py-3 rounded hover:bg-gray-800 {{ request()->routeIs('admin.users.*') ? 'bg-orange-500 text-white' : 'text-gray-300' }}">
+                    <i class="fas fa-users w-6"></i> Utilisateurs
+                    @php
+                        $pendingUsers = \App\Models\User::where('is_verified', 0)->where('role', '!=', 'admin')->count();
+                    @endphp
+                    @if($pendingUsers > 0)
+                        <span class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                            {{ $pendingUsers }}
+                        </span>
+                    @endif
             </a>
             <a href="{{ route('admin.shops.index') }}"
-            class="flex items-center px-4 py-3 rounded hover:bg-gray-800 {{ request()->routeIs('admin.shops.*') ? 'bg-orange-500 text-white' : 'text-gray-300' }}">
+                class="flex items-center px-4 py-3 rounded hover:bg-gray-800 {{ request()->routeIs('admin.shops.*') ? 'bg-orange-500 text-white' : 'text-gray-300' }}">
                 <i class="fas fa-store w-6"></i> Boutiques
-    @php
-        $pendingShops = \App\Models\Company::where('status', 'pending')->count();
-    @endphp
-    @if($pendingShops > 0)
-        <span class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-            {{ $pendingShops }}
-        </span>
-    @endif
-</a>
-            <a href="#" class="flex items-center px-4 py-3 rounded hover:bg-gray-800 text-gray-300">
-                <i class="fas fa-box w-6"></i> Produits
+                @php
+                    $pendingShops = \App\Models\Company::where('status', 'pending')->count();
+                @endphp
+                @if($pendingShops > 0)
+                    <span class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                        {{ $pendingShops }}
+                    </span>
+                @endif
             </a>
-            <a href="#" class="flex items-center px-4 py-3 rounded hover:bg-gray-800 text-gray-300">
-                <i class="fas fa-shopping-bag w-6"></i> Commandes
+            <a href="{{ route('admin.products.index') }}"
+                class="flex items-center px-4 py-3 rounded hover:bg-gray-800 {{ request()->routeIs('admin.products.*') ? 'bg-orange-500 text-white' : 'text-gray-300' }}">
+                    <i class="fas fa-box w-6"></i> Produits
+                    @php
+                        $pendingProducts = \App\Models\Product::where('status', 'pending')->count();
+                    @endphp
+                    @if($pendingProducts > 0)
+                        <span class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                            {{ $pendingProducts }}
+                        </span>
+                    @endif
+            </a>
+            <a href="{{ route('admin.orders.index') }}"
+                class="flex items-center px-4 py-3 rounded hover:bg-gray-800 {{ request()->routeIs('admin.orders.*') ? 'bg-orange-500 text-white' : 'text-gray-300' }}">
+                    <i class="fas fa-shopping-bag w-6"></i> Commandes
+                    @php
+                        $pendingOrders = \App\Models\Order::where('status', 'pending')->count();
+                    @endphp
+                    @if($pendingOrders > 0)
+                        <span class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                            {{ $pendingOrders }}
+                        </span>
+                    @endif
+            </a>
+
+
+            <a href="{{ route('admin.categories.index') }}"
+                class="flex items-center px-4 py-3 rounded hover:bg-gray-800 {{ request()->routeIs('admin.categories.*') ? 'bg-orange-500 text-white' : 'text-gray-300' }}">
+                    <i class="fas fa-tags w-6"></i> Catégories
+            </a>
+
+
+            <a href="{{ route('admin.notifications.index') }}"
+                class="flex items-center px-4 py-3 rounded hover:bg-gray-800 {{ request()->routeIs('admin.notifications.*') ? 'bg-orange-500 text-white' : 'text-gray-300' }}">
+                <i class="fas fa-bullhorn w-6"></i> Notifications
+            </a>
+
+
+            <a href="{{ route('admin.stats.index') }}"
+                class="flex items-center px-4 py-3 rounded hover:bg-gray-800 {{ request()->routeIs('admin.stats.*') ? 'bg-orange-500 text-white' : 'text-gray-300' }}">
+                <i class="fas fa-chart-bar w-6"></i> Statistiques
             </a>
         </nav>
 
