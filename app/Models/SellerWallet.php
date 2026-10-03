@@ -73,4 +73,6 @@ class SellerWallet extends Model
     {
         return $query->where('currency', $currency);
     }
+
+   
 }

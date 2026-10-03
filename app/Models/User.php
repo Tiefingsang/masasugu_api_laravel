@@ -125,5 +125,22 @@ class User extends Authenticatable
     }
 
 
+    /**
+     * Relation : moyens de retrait du vendeur
+     */
+    public function payoutMethods()
+    {
+        return $this->hasMany(PayoutMethod::class, 'seller_id');
+    }
+
+    /**
+     * Relation : demandes de retrait du vendeur
+     */
+    public function payouts()
+    {
+        return $this->hasMany(Payout::class, 'seller_id');
+    }
+
+
 
 }
