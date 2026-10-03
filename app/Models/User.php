@@ -108,4 +108,22 @@ class User extends Authenticatable
         return $this->role === 'buyer';
     }
 
+        /**
+     * Relation : wallet du vendeur
+     */
+    public function wallet()
+    {
+        return $this->hasOne(SellerWallet::class, 'seller_id');
+    }
+
+    /**
+     * Relation : transactions du wallet vendeur
+     */
+    public function walletTransactions()
+    {
+        return $this->hasMany(WalletTransaction::class, 'seller_id');
+    }
+
+
+
 }
