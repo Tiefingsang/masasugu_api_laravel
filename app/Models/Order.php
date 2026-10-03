@@ -63,4 +63,12 @@ class Order extends Model
     {
         return $this->items()->with('seller', 'company')->get()->groupBy('seller_id');
     }
+
+    /**
+ * Relation : transactions liées à cette commande
+ */
+    public function transactions()
+    {
+        return $this->hasMany(Transaction::class);
+    }
 }

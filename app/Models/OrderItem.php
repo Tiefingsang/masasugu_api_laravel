@@ -62,4 +62,12 @@ class OrderItem extends Model
     {
         return $this->belongsTo(Company::class);
     }
+
+    /**
+     * Relation : transactions liées à cet item
+     */
+    public function transactions()
+    {
+        return $this->hasMany(Transaction::class);
+    }
 }
