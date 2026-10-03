@@ -60,7 +60,7 @@ class CartController extends Controller
         }
 
         // ═══════════════════════════════════════════════
-        // 🔔 NOTIFICATIONS AU VENDEUR
+        //  NOTIFICATIONS AU VENDEUR
         // ═══════════════════════════════════════════════
         $seller = \App\Models\User::where('company_id', $companyId)
             ->whereIn('role', ['seller', 'vendeur', 'admin'])
