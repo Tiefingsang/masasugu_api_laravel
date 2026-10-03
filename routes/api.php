@@ -183,13 +183,24 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/conversations', [ChatController::class,'index']);
     Route::post('/conversations', [ChatController::class,'createOrGetConversation']); //
     Route::get('/conversations/{id}/messages', [ChatController::class,'messages']);
-    Route::post('/messages', [ChatController::class,'send']); 
+    Route::post('/messages', [ChatController::class,'send']);
     Route::post('/messages/upload', [ChatController::class, 'upload']);
     Route::post('/conversations/{id}/mark-as-read', [ChatController::class, 'markAsRead']);
 
 
 
 
+    // ═══════════════════════════════════════════════
+    // WEBHOOKS (publics — appelés par les gateways)
+    // ═══════════════════════════════════════════════
+    Route::post('/webhooks/{gateway}', [\App\Http\Controllers\Api\WebhookController::class, 'handle'])
+        ->name('webhooks.handle');
+
+    Route::get('/payments/{gateway}/return', [\App\Http\Controllers\Api\WebhookController::class, 'return'])
+        ->name('payments.return');
+
+    Route::get('/payments/{gateway}/cancel', [\App\Http\Controllers\Api\WebhookController::class, 'cancel'])
+        ->name('payments.cancel');
 
 
 
