@@ -30,8 +30,9 @@ class DatabaseSeeder extends Seeder
         ShopCategorySeeder::class,
         CategorySeeder::class,
         SettingsSeeder::class,
-        CountrySeeder::class,
-        CurrencySeeder::class,
+        CurrenciesSeeder::class,
+        CountriesSeeder::class,
+        PaymentGatewaysSeeder::class,
 
 
     ]);
