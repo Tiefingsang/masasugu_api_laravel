@@ -29,9 +29,9 @@ class ShopController extends Controller
         }
 
         return response()->json(['shop' => $shop], 200);
-    }
+    }     
 
-    
+
    public function store(Request $request)
 {
     $validator = Validator::make($request->all(), [
