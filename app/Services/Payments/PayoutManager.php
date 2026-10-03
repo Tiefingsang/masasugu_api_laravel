@@ -121,7 +121,7 @@ class PayoutManager
     /**
      * ✅ Marquer comme complété
      */
-    public function complete(Payout $payout, string $providerReference = null): void
+    public function complete(Payout $payout, ?string $providerReference = null): void
     {
         if (!in_array($payout->status, ['pending', 'processing'])) {
             throw new PaymentException("Ce payout ne peut pas être complété", 400);
@@ -268,7 +268,7 @@ class PayoutManager
     /**
      * 📊 Statistiques
      */
-    public function getStats(int $sellerId = null): array
+    public function getStats(?int $sellerId = null): array
     {
         $query = Payout::query();
 
