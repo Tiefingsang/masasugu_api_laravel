@@ -46,7 +46,13 @@ Route::get('/categories/{id}/products', [ProductCategoryController::class, 'getP
 
 Route::get('/products/by-shop/{company_id}', [ProductController::class, 'getProductsByShop']);
 
-// Routes spécifiques
+
+// ═══════════════════════════════════════════════
+// WEBHOOKS (publics)
+// ═══════════════════════════════════════════════
+Route::post('/webhooks/{gateway}', [\App\Http\Controllers\Api\WebhookController::class, 'handle']);
+Route::get('/payments/{gateway}/return', [\App\Http\Controllers\Api\WebhookController::class, 'return']);
+Route::get('/payments/{gateway}/cancel', [\App\Http\Controllers\Api\WebhookController::class, 'cancel']);
 
 
 
@@ -201,6 +207,40 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/payments/{gateway}/cancel', [\App\Http\Controllers\Api\WebhookController::class, 'cancel'])
         ->name('payments.cancel');
+
+
+        // ═══════════════════════════════════════════════
+    // PAYMENTS — Endpoints authentifiés
+    // ═══════════════════════════════════════════════
+
+
+    // Pays supportés
+    Route::get('/countries', [\App\Http\Controllers\Api\CountryController::class, 'index']);
+
+    // Moyens de paiement par pays
+    Route::get('/payment-methods', [\App\Http\Controllers\Api\PaymentController::class, 'methods']);
+
+    // Initier un paiement
+    Route::post('/payments/initiate', [\App\Http\Controllers\Api\PaymentController::class, 'initiate']);
+
+    // Vérifier le statut
+    Route::get('/payments/{transactionId}/status', [\App\Http\Controllers\Api\PaymentController::class, 'status']);
+
+    // ═══ WALLET ═══
+    Route::get('/wallet/balance', [\App\Http\Controllers\Api\WalletController::class, 'balance']);
+    Route::get('/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'transactions']);
+    Route::get('/wallet/stats', [\App\Http\Controllers\Api\WalletController::class, 'stats']);
+
+    // ═══ PAYOUT METHODS ═══
+    Route::get('/payout-methods', [\App\Http\Controllers\Api\PayoutController::class, 'indexMethods']);
+    Route::post('/payout-methods', [\App\Http\Controllers\Api\PayoutController::class, 'storeMethod']);
+    Route::delete('/payout-methods/{id}', [\App\Http\Controllers\Api\PayoutController::class, 'destroyMethod']);
+
+    // ═══ PAYOUTS ═══
+    Route::post('/payouts/request', [\App\Http\Controllers\Api\PayoutController::class, 'requestPayout']);
+    Route::get('/payouts', [\App\Http\Controllers\Api\PayoutController::class, 'index']);
+
+
 
 
 
