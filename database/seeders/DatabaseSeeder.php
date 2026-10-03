@@ -3,6 +3,13 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Models\ShopCategory;
+use App\Models\Category;
+use App\Models\Setting;
+use App\Models\Country;
+use App\Models\Currency;
+
+
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -23,6 +30,10 @@ class DatabaseSeeder extends Seeder
         ShopCategorySeeder::class,
         CategorySeeder::class,
         SettingsSeeder::class,
+        CountrySeeder::class,
+        CurrencySeeder::class,
+
+
     ]);
     }
 }
