@@ -5,20 +5,35 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Order extends Model{
+class Order extends Model
+{
     use HasFactory;
 
     protected $fillable = [
         'user_id',
         'company_id',
         'total',
+        'subtotal',
+        'platform_fee_total',
+        'gateway_fee_total',
+        'currency',
+        'country',
+        'paid_at',
         'status',
+        'payment_status',
         'payment_method',
+    ];
 
+    protected $casts = [
+        'subtotal' => 'decimal:2',
+        'platform_fee_total' => 'decimal:2',
+        'gateway_fee_total' => 'decimal:2',
+        'total' => 'decimal:2',
+        'paid_at' => 'datetime',
     ];
 
     /**
-     *  Relation : une commande appartient à un utilisateur
+     * Relation : une commande appartient à un utilisateur
      */
     public function user()
     {
@@ -26,29 +41,26 @@ class Order extends Model{
     }
 
     /**
-     *  Relation : une commande a plusieurs articles
+     * Relation : une commande a plusieurs articles
      */
     public function items()
     {
         return $this->hasMany(OrderItem::class);
     }
-    // Relation : un article de commande appartient à un produit
 
-    public function product(){
-        return $this->belongsTo(Product::class);
-    }
-
-    public function shop(){
-        return $this->belongsTo(Compagny::class, 'company_id'); 
-    }
-
+    /**
+     * Relation : une commande appartient à une boutique (legacy)
+     */
     public function company()
-{
-    return $this->belongsTo(Company::class);
-}
+    {
+        return $this->belongsTo(Company::class);
+    }
 
-
-    
-
-
+    /**
+     * Relation : les items groupés par vendeur
+     */
+    public function itemsBySeller()
+    {
+        return $this->items()->with('seller', 'company')->get()->groupBy('seller_id');
+    }
 }
