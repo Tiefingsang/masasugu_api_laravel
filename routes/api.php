@@ -242,6 +242,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
 
+    
+
+    // 🎯 Interactions / Recommandations
+    Route::post('/interactions', [App\Http\Controllers\Api\InteractionController::class, 'store']);
+    Route::post('/interactions/batch', [App\Http\Controllers\Api\InteractionController::class, 'storeBatch']);
+    Route::get('/interactions/preferences', [App\Http\Controllers\Api\InteractionController::class, 'myPreferences']);
+    Route::post('/interactions/tracking', [App\Http\Controllers\Api\InteractionController::class, 'toggleTracking']);
+
+
+
+
 
 
 

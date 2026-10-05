@@ -141,6 +141,22 @@ class User extends Authenticatable
         return $this->hasMany(Payout::class, 'seller_id');
     }
 
+    /**
+     * 🎯 Interactions utilisateur (views, likes, achats…)
+     */
+    public function interactions()
+    {
+        return $this->hasMany(UserInteraction::class);
+    }
+
+    /**
+     * 🎯 Préférences calculées (top catégories, brands…)
+     */
+    public function preferences()
+    {
+        return $this->hasOne(UserPreference::class);
+    }
+
 
 
 }
