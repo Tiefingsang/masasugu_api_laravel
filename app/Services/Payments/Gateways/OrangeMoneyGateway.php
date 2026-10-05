@@ -48,9 +48,18 @@ class OrangeMoneyGateway implements PaymentGatewayInterface
             $config = $gateway->config ?? [];
             $this->isSandbox = $gateway->is_sandbox;
 
-            $this->clientId = $config['client_id'] ?? env('ORANGE_MONEY_CLIENT_ID', '');
-            $this->clientSecret = $config['client_secret'] ?? env('ORANGE_MONEY_CLIENT_SECRET', '');
-            $this->merchantKey = $config['merchant_key'] ?? env('ORANGE_MONEY_MERCHANT_KEY', '');
+            // ✅ Fallback sur env() si la valeur en DB est vide
+            $this->clientId = !empty($config['client_id'])
+                ? $config['client_id']
+                : env('ORANGE_MONEY_CLIENT_ID', '');
+
+            $this->clientSecret = !empty($config['client_secret'])
+                ? $config['client_secret']
+                : env('ORANGE_MONEY_CLIENT_SECRET', '');
+
+            $this->merchantKey = !empty($config['merchant_key'])
+                ? $config['merchant_key']
+                : env('ORANGE_MONEY_MERCHANT_KEY', '');
             $this->apiUrl = $this->isSandbox
                 ? ($config['api_url_dev'] ?? 'https://api.orange.com/orange-money-webpay/dev/v1')
                 : ($config['api_url_prod'] ?? 'https://api.orange.com/orange-money-webpay/ml/v1');
