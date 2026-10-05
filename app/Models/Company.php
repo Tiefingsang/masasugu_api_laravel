@@ -13,7 +13,8 @@ class Company extends Model
     use HasFactory;
     use Notifiable;
 
-
+    protected $appends = ['logo_url', 'whatsapp_phone'];
+    
     protected $fillable = [
         'user_id',
         'name',
@@ -114,7 +115,24 @@ class Company extends Model
         return 'https://api.masasugu.com/storage/' . ltrim($this->logo, '/');
     }
 
-    // app/Models/Company.php
+    /**
+     * 📞 Numéro WhatsApp effectif de la boutique
+     * Priorité : contact_phone → user.phone → null
+     */
+   /**
+ * 📞 Numéro WhatsApp effectif de la boutique
+ * Priorité : contact_phone → user.phone
+ */
+    public function getWhatsappPhoneAttribute(): ?string
+    {
+        if (!empty($this->contact_phone)) {
+            return $this->contact_phone;
+        }
+        if ($this->user && !empty($this->user->phone)) {
+            return $this->user->phone;
+        }
+        return null;
+    }
 
 
 

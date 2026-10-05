@@ -17,6 +17,20 @@ class ShopController extends Controller
     /**
      * 🔍 Récupère la boutique d’un utilisateur
      */
+    // public function getByUser($userId)
+    // {
+    //     $shop = Company::with('user')->where('user_id', $userId)->first();
+
+    //     if (!$shop) {
+    //         return response()->json([
+    //             'message' => 'Aucune boutique trouvée pour cet utilisateur',
+    //             'shop' => null
+    //         ], 404);
+    //     }
+
+    //     return response()->json(['shop' => $shop], 200);
+    // }
+
     public function getByUser($userId)
     {
         $shop = Company::with('user')->where('user_id', $userId)->first();
@@ -28,8 +42,13 @@ class ShopController extends Controller
             ], 404);
         }
 
+        // 🆕 Fallback : renvoyer contact_phone = numéro du créateur si vide
+        if (empty($shop->contact_phone) && $shop->user && !empty($shop->user->phone)) {
+            $shop->contact_phone = $shop->user->phone;
+        }
+
         return response()->json(['shop' => $shop], 200);
-    }     
+    }
 
 
    public function store(Request $request)
@@ -121,32 +140,92 @@ class ShopController extends Controller
         return response()->json(['shops' => $shops], 200);
     }
 
-    public function update(Request $request, $id){
+    // public function update(Request $request, $id){
+    //     $shop = Company::find($id);
+
+    //     if (!$shop) {
+    //         return response()->json(['message' => 'Boutique introuvable'], 404);
+    //     }
+
+    //     $shop->update([
+    //         'name' => $request->name,
+    //         'description' => $request->description,
+    //         'contact_phone' => $request->contactPhone,
+    //         'country' => $request->country,
+    //         'address' => $request->address,
+    //         'website' => $request->website,
+    //     ]);
+
+    //     // gestion du logo (si envoyé)
+    //     if ($request->hasFile('logo')) {
+    //         $path = $request->file('logo')->store('logos', 'public');
+    //         $shop->logo = asset("storage/$path");
+    //         $shop->save();
+    //     }
+
+    //     return response()->json([
+    //         'message' => 'Boutique mise à jour avec succès',
+    //         'shop' => $shop
+    //     ]);
+    // }
+
+
+    public function update(Request $request, $id)
+    {
         $shop = Company::find($id);
 
         if (!$shop) {
             return response()->json(['message' => 'Boutique introuvable'], 404);
         }
 
-        $shop->update([
-            'name' => $request->name,
-            'description' => $request->description,
-            'contact_phone' => $request->contactPhone,
-            'country' => $request->country,
-            'address' => $request->address,
-            'website' => $request->website,
+        // 🆕 Validation souple (tout optionnel sauf name)
+        $validated = $request->validate([
+            'name'           => 'required|string|max:255',
+            'description'    => 'nullable|string',
+            'contact_phone'  => 'nullable|string|max:50',
+            'contact_email'  => 'nullable|email|max:255',
+            'country'        => 'nullable|string|max:100',
+            'city'           => 'nullable|string|max:100',
+            'postal_code'    => 'nullable|string|max:20',
+            'address'        => 'nullable|string|max:255',
+            'website'        => 'nullable|string|max:255',
+            'facebook'       => 'nullable|string|max:255',
+            'instagram'      => 'nullable|string|max:255',
+            'tiktok'         => 'nullable|string|max:255',
+            'license_number' => 'nullable|string|max:100',
         ]);
 
-        // gestion du logo (si envoyé)
+        // 🆕 Mapper camelCase → snake_case si Flutter envoie contactPhone
+        if ($request->has('contactPhone') && !isset($validated['contact_phone'])) {
+            $validated['contact_phone'] = $request->input('contactPhone');
+        }
+        if ($request->has('contactEmail') && !isset($validated['contact_email'])) {
+            $validated['contact_email'] = $request->input('contactEmail');
+        }
+        if ($request->has('licenseNumber') && !isset($validated['license_number'])) {
+            $validated['license_number'] = $request->input('licenseNumber');
+        }
+        if ($request->has('postalCode') && !isset($validated['postal_code'])) {
+            $validated['postal_code'] = $request->input('postalCode');
+        }
+
+        $shop->update($validated);
+
+        // 🆕 Gestion du logo (upload multipart)
         if ($request->hasFile('logo')) {
+            // Supprimer l'ancien logo
+            if ($shop->logo && !str_starts_with($shop->logo, 'http')) {
+                \Storage::disk('public')->delete($shop->logo);
+            }
+
             $path = $request->file('logo')->store('logos', 'public');
-            $shop->logo = asset("storage/$path");
+            $shop->logo = $path; // 👈 stocke le chemin relatif
             $shop->save();
         }
 
         return response()->json([
             'message' => 'Boutique mise à jour avec succès',
-            'shop' => $shop
+            'shop'    => $shop->fresh()->load('user'),
         ]);
     }
 

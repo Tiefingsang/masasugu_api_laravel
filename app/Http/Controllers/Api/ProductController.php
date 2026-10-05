@@ -78,11 +78,58 @@ class ProductController extends Controller
     // ═══════════════════════════════════════════════════════════
     // 📋 INDEX — Liste paginée
     // ═══════════════════════════════════════════════════════════
+    // public function index(Request $request)
+    // {
+    //     $query = Product::with(['company', 'user', 'images', 'category'])
+    //         ->where('status', 'approved')
+    //         ->orderBy('created_at', 'desc');
+
+    //     if ($request->has('category_id')) {
+    //         $query->where('category_id', $request->category_id);
+    //     }
+
+    //     if ($request->has('company_id')) {
+    //         $query->where('company_id', $request->company_id);
+    //     }
+
+    //     $products = $query->paginate(20);
+
+    //     $products->getCollection()->transform(function ($product) {
+    //         $product->main_image_url = $product->main_image
+    //             ? asset('storage/' . $product->main_image)
+    //             : null;
+
+    //         // 🆕 Priorité : whatsapp_phone (accesseur) → user.phone
+    //         $product->vendor_phone =
+    //             $product->company?->contact_phone
+    //             ?: $product->company?->user?->phone
+    //             ?: $product->user?->phone
+    //             ?: null;
+    //         $product->likes_list = $product->likes;
+    //         $product->likes = $product->likes()->count();
+    //         $product->is_liked = $product->likes()
+    //             ->where('user_id', auth()->id())
+    //             ->exists();
+
+    //         return $product;
+    //     });
+
+    //     return response()->json($products);
+    // }
+
     public function index(Request $request)
     {
-        $query = Product::with(['company', 'user', 'images', 'category'])
+        // 🆕 Seed stable pour l'ordre aléatoire (change chaque jour)
+        $seed = (int) $request->input('seed', date('Ymd'));
+
+        $query = Product::with([
+                'company.user',   // ✅ charge company ET son user
+                'user',
+                'images',
+                'category'
+            ])
             ->where('status', 'approved')
-            ->orderBy('created_at', 'desc');
+            ->orderByRaw("RAND($seed)");   // 🆕 ordre aléatoire stable
 
         if ($request->has('category_id')) {
             $query->where('category_id', $request->category_id);
@@ -99,9 +146,20 @@ class ProductController extends Controller
                 ? asset('storage/' . $product->main_image)
                 : null;
 
-            $product->vendor_phone =
-                ($product->company->phone ?? null)
-                ?: ($product->user->phone ?? null);
+            // 🆕 PRIORITÉ pour le numéro WhatsApp :
+            // 1. Numéro de la boutique (contact_phone)
+            // 2. Numéro du créateur de la boutique (company.user.phone)
+            // 3. Numéro du vendeur du produit (user.phone)
+            $rawPhone =
+            $product->company?->contact_phone
+            ?: $product->company?->user?->phone
+            ?: $product->user?->phone
+            ?: null;
+
+            $product->vendor_phone = $this->normalizePhone($rawPhone);
+
+            // 🆕 Nom de la boutique (utile pour WhatsApp)
+            $product->shop_name = $product->company?->name;
 
             $product->likes_list = $product->likes;
             $product->likes = $product->likes()->count();
@@ -112,7 +170,16 @@ class ProductController extends Controller
             return $product;
         });
 
-        return response()->json($products);
+        // 🆕 Retour enrichi avec seed pour pagination cohérente
+        return response()->json([
+            'data'         => $products->items(),
+            'current_page' => $products->currentPage(),
+            'last_page'    => $products->lastPage(),
+            'per_page'     => $products->perPage(),
+            'total'        => $products->total(),
+            'has_more'     => $products->hasMorePages(),
+            'seed'         => $seed,
+        ]);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -202,12 +269,29 @@ class ProductController extends Controller
     // ═══════════════════════════════════════════════════════════
     // 👁️ SHOW — Détails d'un produit
     // ═══════════════════════════════════════════════════════════
-    public function show($id)
-    {
-        $product = Product::with(['company', 'images', 'category'])->findOrFail($id);
-        return response()->json($product);
-    }
+    // public function show($id)
+    // {
+    //     $product = Product::with(['company', 'images', 'category'])->findOrFail($id);
+    //     return response()->json($product);
+    // }
 
+    public function show($id)
+        {
+            $product = Product::with(['company.user', 'user', 'images', 'category'])
+                ->findOrFail($id);
+
+            $rawPhone =
+                $product->company?->contact_phone
+                ?: $product->company?->user?->phone
+                ?: $product->user?->phone
+                ?: null;
+
+            $product->vendor_phone = $this->normalizePhone($rawPhone);
+
+            $product->shop_name = $product->company?->name;
+
+            return response()->json($product);
+        }
     // ═══════════════════════════════════════════════════════════
     // ✏️ UPDATE — Mise à jour (avec images + vidéo)
     // ═══════════════════════════════════════════════════════════
@@ -513,5 +597,35 @@ class ProductController extends Controller
             'success' => true,
             'rating' => $average,
         ]);
+    }
+
+    /**
+     * 📞 Normalise le numéro de téléphone au format international E.164
+     * "73624958"        → "+22373624958"
+     * "83 68 03 19"     → "+22383680319"
+     * "+22378794089"    → "+22378794089" (inchangé)
+     * "0022378794089"   → "+22378794089"
+     */
+    private function normalizePhone(?string $phone): ?string
+    {
+        if (empty($phone)) return null;
+
+        // Enlève tout sauf les chiffres et le +
+        $clean = preg_replace('/[^0-9+]/', '', $phone);
+
+        if (empty($clean)) return null;
+
+        // Convertit "00" en "+" au début
+        if (str_starts_with($clean, '00')) {
+            $clean = '+' . substr($clean, 2);
+        }
+
+        // Si pas d'indicatif international, ajoute +223 (Mali)
+        if (!str_starts_with($clean, '+')) {
+            $clean = ltrim($clean, '0'); // Enlève le 0 initial
+            $clean = '+223' . $clean;
+        }
+
+        return $clean;
     }
 }
