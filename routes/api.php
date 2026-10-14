@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\AccountDeletionController;
 use Illuminate\Http\Request;
 
 
@@ -61,7 +62,10 @@ Route::get('/payments/{gateway}/cancel', [\App\Http\Controllers\Api\WebhookContr
 
 
 
-
+// ═══════════════════════════════════════════════
+    // 🌐 SUPPRESSION DE COMPTE VIA LE SITE WEB (public)
+    // ═══════════════════════════════════════════════
+    Route::post('/account-deletion-web', [AccountDeletionController::class, 'destroyByEmail']);
 
 // Routes protégées
 Route::middleware('auth:sanctum')->group(function () {
@@ -72,6 +76,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     // ... à la fin du groupe, par exemple après la ligne 'logout'
     Route::delete('/user', [\App\Http\Controllers\Api\UserController::class, 'destroy']);
+
 
     Route::post('/user/fcm-token', [AuthController::class, 'saveFcmToken']);
 
