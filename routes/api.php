@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\ProductImageController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ChatController;
+use App\Http\Controllers\Api\UserController;
 use Illuminate\Http\Request;
 
 
@@ -69,6 +70,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/user/avatar', [AuthController::class, 'updateAvatar']);
 
     Route::post('/logout', [AuthController::class, 'logout']);
+    // ... à la fin du groupe, par exemple après la ligne 'logout'
+    Route::delete('/user', [\App\Http\Controllers\Api\UserController::class, 'destroy']);
 
     Route::post('/user/fcm-token', [AuthController::class, 'saveFcmToken']);
 
@@ -242,7 +245,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
 
-    
+
 
     // 🎯 Interactions / Recommandations
     Route::post('/interactions', [App\Http\Controllers\Api\InteractionController::class, 'store']);
