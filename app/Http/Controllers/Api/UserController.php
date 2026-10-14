@@ -78,11 +78,13 @@ class UserController extends Controller
             // 3.6. Supprimer le panier (cart items)
             DB::table('carts')->where('user_id', $user->id)->delete();
 
-            // 3.7. Supprimer les conversations de l'utilisateur
-            // Conversations de l'utilisateur (en tant qu'acheteur)
-DB::table('conversations')
-    ->where('user_id', $user->id)
-    ->delete();
+            // 3.7. Supprimer les conversations de l'utilisateur (en tant qu'acheteur)
+            DB::table('conversations')
+                ->where('user_id', $user->id)
+                ->delete();
+
+            // 3.8. ⚠️ IMPORTANT : Supprimer l'utilisateur lui-même
+            $user->delete();
 
             DB::commit();
 
