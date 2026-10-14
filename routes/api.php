@@ -90,6 +90,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/products/{id}/rate', [ProductController::class, 'rateProduct']);
 
 
+    // ═══ SIGNALEMENT / MODÉRATION ═══
+    Route::post('/reports', [\App\Http\Controllers\Api\ReportController::class, 'store']);
+    Route::post('/users/{id}/block', [\App\Http\Controllers\Api\ReportController::class, 'block']);
+    Route::delete('/users/{id}/block', [\App\Http\Controllers\Api\ReportController::class, 'unblock']);
+    Route::get('/blocked-users', [\App\Http\Controllers\Api\ReportController::class, 'blockedList']);
+
+
 
 
 
