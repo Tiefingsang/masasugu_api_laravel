@@ -33,6 +33,7 @@ class DatabaseSeeder extends Seeder
         CurrenciesSeeder::class,
         CountriesSeeder::class,
         PaymentGatewaysSeeder::class,
+        AdminUserSeeder::class,
 
 
     ]);

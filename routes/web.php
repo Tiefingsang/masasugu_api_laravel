@@ -44,6 +44,20 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::delete('/{id}', [ShopController::class, 'destroy'])->name('destroy');
         });
 
+            // ═══════════════════════════════════════════════
+            // 🚩 SIGNALEMENTS / MODÉRATION
+            // ═══════════════════════════════════════════════
+            Route::get('/reports', [\App\Http\Controllers\Admin\ReportController::class, 'index'])->name('reports.index');
+            Route::get('/reports/{id}', [\App\Http\Controllers\Admin\ReportController::class, 'show'])->name('reports.show');
+            Route::post('/reports/{id}/resolve', [\App\Http\Controllers\Admin\ReportController::class, 'resolve'])->name('reports.resolve');
+            Route::post('/reports/{id}/reject', [\App\Http\Controllers\Admin\ReportController::class, 'reject'])->name('reports.reject');
+            Route::post('/reports/{id}/delete-content', [\App\Http\Controllers\Admin\ReportController::class, 'deleteContent'])->name('reports.delete-content');
+            Route::delete('/reports/{id}', [\App\Http\Controllers\Admin\ReportController::class, 'destroy'])->name('reports.destroy');
+
+            // Utilisateurs bloqués
+            Route::get('/blocked-users', [\App\Http\Controllers\Admin\ReportController::class, 'blockedUsers'])->name('reports.blocked');
+            Route::delete('/blocked-users/{id}', [\App\Http\Controllers\Admin\ReportController::class, 'unblock'])->name('reports.unblock');
+
         // ─── UTILISATEURS ───
         Route::prefix('users')->name('users.')->group(function () {
             Route::get('/', [UserController::class, 'index'])->name('index');
