@@ -65,9 +65,7 @@ Route::post('/auth/google', [\App\Http\Controllers\Api\AuthController::class, 'g
 // ═══════════════════════════════════════════════
 // 🔐 RESET PASSWORD — Route publique
 // ═══════════════════════════════════════════════
-Route::get('/reset-password/{token}', function ($token) {
-    return view('reset-password', ['token' => $token]);
-})->name('password.reset');
+
 
 
 // ═══════════════════════════════════════════════
