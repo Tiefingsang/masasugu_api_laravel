@@ -11,7 +11,10 @@ use Illuminate\Support\Str;
 
 
 
-class User extends Authenticatable
+// class User extends Authenticatable
+// {
+
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasApiTokens;
@@ -142,7 +145,7 @@ class User extends Authenticatable
     }
 
     /**
-     * 🎯 Interactions utilisateur (views, likes, achats…)
+     * Interactions utilisateur (views, likes, achats…)
      */
     public function interactions()
     {
@@ -150,11 +153,20 @@ class User extends Authenticatable
     }
 
     /**
-     * 🎯 Préférences calculées (top catégories, brands…)
+     * Préférences calculées (top catégories, brands…)
      */
     public function preferences()
     {
         return $this->hasOne(UserPreference::class);
+    }
+
+
+    /**
+     * Personnaliser l'email de vérification
+     */
+    public function sendEmailVerificationNotification()
+    {
+        $this->notify(new \App\Notifications\VerifyEmailNotification());
     }
 
 

@@ -59,13 +59,22 @@ Route::get('/payments/{gateway}/cancel', [\App\Http\Controllers\Api\WebhookContr
 
 
 
-
+// ═══ GOOGLE SIGN-IN ═══
+Route::post('/auth/google', [\App\Http\Controllers\Api\AuthController::class, 'googleLogin']);
 
 
 // ═══════════════════════════════════════════════
     // 🌐 SUPPRESSION DE COMPTE VIA LE SITE WEB (public)
     // ═══════════════════════════════════════════════
-    Route::post('/account-deletion-web', [AccountDeletionController::class, 'destroyByEmail']);
+
+
+
+Route::post('/forgot-password', [\App\Http\Controllers\Api\AuthController::class, 'forgotPassword']);
+Route::post('/reset-password', [\App\Http\Controllers\Api\AuthController::class, 'resetPassword']);
+
+// ═══ VÉRIFICATION EMAIL (public) ═══
+Route::get('/email/verify/{id}/{hash}', [\App\Http\Controllers\Api\EmailVerificationController::class, 'verify'])
+    ->name('verification.verify');
 
 // Routes protégées
 Route::middleware('auth:sanctum')->group(function () {
@@ -76,6 +85,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     // ... à la fin du groupe, par exemple après la ligne 'logout'
     Route::delete('/user', [\App\Http\Controllers\Api\UserController::class, 'destroy']);
+
+    // ═══ VÉRIFICATION EMAIL ═══
+Route::post('/email/verification-notification', [\App\Http\Controllers\Api\EmailVerificationController::class, 'resend'])
+    ->middleware('throttle:6,1');
 
 
     Route::post('/user/fcm-token', [AuthController::class, 'saveFcmToken']);
