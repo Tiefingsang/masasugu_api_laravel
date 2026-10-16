@@ -62,6 +62,13 @@ Route::get('/payments/{gateway}/cancel', [\App\Http\Controllers\Api\WebhookContr
 // ═══ GOOGLE SIGN-IN ═══
 Route::post('/auth/google', [\App\Http\Controllers\Api\AuthController::class, 'googleLogin']);
 
+// ═══════════════════════════════════════════════
+// 🔐 RESET PASSWORD — Route publique
+// ═══════════════════════════════════════════════
+Route::get('/reset-password/{token}', function ($token) {
+    return view('reset-password', ['token' => $token]);
+})->name('password.reset');
+
 
 // ═══════════════════════════════════════════════
     // 🌐 SUPPRESSION DE COMPTE VIA LE SITE WEB (public)
