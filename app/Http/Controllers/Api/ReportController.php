@@ -8,6 +8,8 @@ use App\Models\BlockedUser;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Http\Request;
+use App\Mail\NewReportNotification;
+use Illuminate\Support\Facades\Mail;
 
 class ReportController extends Controller
 {
@@ -74,11 +76,28 @@ class ReportController extends Controller
             'status' => 'pending',
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Signalement envoyé. Merci pour votre contribution.',
-            'report_id' => $report->id,
-        ], 201);
+        $report = Report::create([
+    'reporter_id' => $request->user()->id,
+    'reportable_type' => $type,
+    'reportable_id' => $validated['reportable_id'],
+    'reason' => $validated['reason'],
+    'description' => $validated['description'] ?? null,
+    'status' => 'pending',
+]);
+
+// 📧 Envoyer un email à l'admin
+try {
+    Mail::to('supportmasasugu@gmail.com')->send(new NewReportNotification($report));
+    \Log::info('📧 Email signalement envoyé à supportmasasugu@gmail.com');
+} catch (\Exception $e) {
+    \Log::error('❌ Erreur envoi email signalement : ' . $e->getMessage());
+}
+
+return response()->json([
+    'success' => true,
+    'message' => 'Signalement envoyé. Merci pour votre contribution.',
+    'report_id' => $report->id,
+], 201);
     }
 
     /**
