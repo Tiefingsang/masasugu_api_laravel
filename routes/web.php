@@ -24,6 +24,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
 
     // ═══════════════════════════════════════════════
+// 🔐 RESET PASSWORD — Route publique
+// ═══════════════════════════════════════════════
+        Route::get('/reset-password/{token}', function ($token) {
+            return view('reset-password', ['token' => $token]);
+        })->name('password.reset');
+
+    // ═══════════════════════════════════════════════
     // ROUTES PROTÉGÉES (auth + admin)
     // ═══════════════════════════════════════════════
     Route::middleware(['auth', 'admin'])->group(function () {
