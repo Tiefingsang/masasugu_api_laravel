@@ -15,6 +15,13 @@ Route::get('/', function () {
     return redirect('/admin/login');
 });
 
+    // ═══════════════════════════════════════════════
+// 🔐 RESET PASSWORD — Route publique
+// ═══════════════════════════════════════════════
+        Route::get('/reset-password/{token}', function ($token) {
+            return view('reset-password', ['token' => $token]);
+        })->name('password.reset');
+
 Route::prefix('admin')->name('admin.')->group(function () {
 
     // ═══════════════════════════════════════════════
@@ -23,12 +30,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthController::class, 'login']);
 
-    // ═══════════════════════════════════════════════
-// 🔐 RESET PASSWORD — Route publique
-// ═══════════════════════════════════════════════
-        Route::get('/reset-password/{token}', function ($token) {
-            return view('reset-password', ['token' => $token]);
-        })->name('password.reset');
+
 
     // ═══════════════════════════════════════════════
     // ROUTES PROTÉGÉES (auth + admin)
