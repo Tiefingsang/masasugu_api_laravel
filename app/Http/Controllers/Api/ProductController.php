@@ -198,10 +198,10 @@ class ProductController extends Controller
             'discount_price' => 'nullable|numeric|min:0',
             'stock'          => 'required|integer|min:0',
             'brand'          => 'nullable|string|max:100',
-            'main_image'     => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120',
+            'main_image'     => 'nullable|file|mimes:jpg,jpeg,png,webp|max:51200',
             'extra_images'   => 'nullable|array|max:5',
-            'extra_images.*' => 'file|mimes:jpg,jpeg,png,webp|max:5120',
-            'video'          => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/x-msvideo,video/webm|max:51200',
+            'extra_images.*' => 'file|mimes:jpg,jpeg,png,webp|max:51200',
+            'video'          => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/x-msvideo,video/webm|max:512000',
         ]);
 
         // 🔹 Slug unique
@@ -313,10 +313,10 @@ class ProductController extends Controller
             'brand'          => 'nullable|string|max:255',
             'discount_price' => 'nullable|numeric|min:0',
             'category_id'    => 'required|integer|exists:categories,id',
-            'main_image'     => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'main_image'     => 'nullable|image|mimes:jpeg,png,jpg,webp|max:512000',
             'extra_images'   => 'nullable|array|max:5',
-            'extra_images.*' => 'image|mimes:jpeg,png,jpg,webp|max:5120',
-            'video'          => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/x-msvideo,video/webm|max:51200',
+            'extra_images.*' => 'image|mimes:jpeg,png,jpg,webp|max:51200',
+            'video'          => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/x-msvideo,video/webm|max:512000',
         ]);
 
         // ✅ Nouvelle image principale
@@ -367,9 +367,21 @@ class ProductController extends Controller
     // ═══════════════════════════════════════════════════════════
     public function uploadVideo(Request $request, $id)
     {
-        $request->validate([
-            'video' => 'nullable|file|mimetypes:video/mp4,video/x-msvideo,video/quicktime,video/x-matroska,video/webm,video/ogg|max:512000',
+        // 🔍 DEBUG
+        Log::info('Upload vidéo — infos fichier', [
+            'has_file' => $request->hasFile('video'),
+            'file_size' => $request->hasFile('video') ? $request->file('video')->getSize() : null,
+            'mime' => $request->hasFile('video') ? $request->file('video')->getMimeType() : null,
+            'extension' => $request->hasFile('video') ? $request->file('video')->getClientOriginalExtension() : null,
+            'error' => $request->hasFile('video') ? $request->file('video')->getError() : null,
         ]);
+
+        $request->validate([
+            'video' => 'required|file|mimes:mp4,mov,avi,mkv,webm,3gp,ogg|max:512000',
+        ]);
+        // $request->validate([
+        //     'video' => 'nullable|file|mimetypes:video/mp4,video/x-msvideo,video/quicktime,video/x-matroska,video/webm,video/ogg|max:512000',
+        // ]);
 
         if ($request->hasFile('video')) {
             $path = $request->file('video')->store('products/videos', 'public');
