@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\AccountDeletionController;
+use App\Http\Controllers\Api\ProductRatingController;
 use Illuminate\Http\Request;
 
 
@@ -92,11 +93,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/user', [\App\Http\Controllers\Api\UserController::class, 'destroy']);
 
     // ═══ VÉRIFICATION EMAIL ═══
-Route::post('/email/verification-notification', [\App\Http\Controllers\Api\EmailVerificationController::class, 'resend'])
+    Route::post('/email/verification-notification', [\App\Http\Controllers\Api\EmailVerificationController::class, 'resend'])
     ->middleware('throttle:6,1');
 
 
     Route::post('/user/fcm-token', [AuthController::class, 'saveFcmToken']);
+
+    Route::delete('/shops/{id}/certification-document', [ShopController::class, 'deleteCertificationDocument']);
 
 
     //products routes
@@ -175,6 +178,13 @@ Route::post('/email/verification-notification', [\App\Http\Controllers\Api\Email
     // Récupérer les statistiques d'une boutique
     Route::get('/companies/{id}/stats', [ShopController::class, 'getShopStats']);
     Route::get('/companies/{id}/products/overview', [ShopController::class, 'getShopProducts']);
+
+
+
+    Route::get('/products/{product}/ratings', [ProductRatingController::class, 'index']);
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/products/{product}/ratings', [ProductRatingController::class, 'store']);
+    });
 
 
 

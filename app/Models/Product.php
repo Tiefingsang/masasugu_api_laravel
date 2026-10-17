@@ -34,6 +34,16 @@ class Product extends Model
         'views',
         'sales_count',
         'likes',
+        'colors',
+        'sizes',
+        'condition',
+        'min_quantity',
+        'audience',
+    ];
+
+    protected $casts = [
+        'colors' => 'array',
+        'sizes' => 'array',
     ];
 
     // Relations
@@ -79,5 +89,5 @@ class Product extends Model
 
 
 
-    
+
 }

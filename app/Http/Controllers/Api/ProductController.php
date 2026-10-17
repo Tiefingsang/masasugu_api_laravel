@@ -202,6 +202,13 @@ class ProductController extends Controller
             'extra_images'   => 'nullable|array|max:5',
             'extra_images.*' => 'file|mimes:jpg,jpeg,png,webp|max:51200',
             'video'          => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/x-msvideo,video/webm|max:512000',
+            'colors' => 'nullable|array',
+            'colors.*' => 'string|max:50',
+            'sizes' => 'nullable|array',
+            'sizes.*' => 'string|max:50',
+            'condition' => 'nullable|in:nouveau,comme_neuf,bon_etat,usage,reconditionne',
+            'min_quantity' => 'nullable|integer|min:1',
+            'audience' => 'nullable|in:public,homme,femme,enfant',
         ]);
 
         // 🔹 Slug unique
@@ -223,6 +230,11 @@ class ProductController extends Controller
             'is_available'   => true,
             'brand'          => $request->brand,
             'status'         => 'approved',
+            'colors' => $request->colors ?? null,
+            'sizes' => $request->sizes ?? null,
+            'condition' => $request->condition ?? 'nouveau',
+            'min_quantity' => $request->min_quantity ?? 1,
+            'audience' => $request->audience ?? 'public',
         ]);
 
         // 2. Image principale
@@ -296,71 +308,78 @@ class ProductController extends Controller
     // ✏️ UPDATE — Mise à jour (avec images + vidéo)
     // ═══════════════════════════════════════════════════════════
     public function update(Request $request, $id)
-    {
-        $product = Product::findOrFail($id);
+{
+    $product = Product::findOrFail($id);
 
-        // 🔒 Autorisation
-        if ($product->user_id !== Auth::id()) {
-            return response()->json(['error' => 'Non autorisé.'], 403);
-        }
-
-        // ✅ Validation
-        $validated = $request->validate([
-            'name'           => 'required|string|max:255',
-            'description'    => 'nullable|string',
-            'price'          => 'required|numeric|min:0',
-            'stock'          => 'required|integer|min:0',
-            'brand'          => 'nullable|string|max:255',
-            'discount_price' => 'nullable|numeric|min:0',
-            'category_id'    => 'required|integer|exists:categories,id',
-            'main_image'     => 'nullable|image|mimes:jpeg,png,jpg,webp|max:512000',
-            'extra_images'   => 'nullable|array|max:5',
-            'extra_images.*' => 'image|mimes:jpeg,png,jpg,webp|max:51200',
-            'video'          => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/x-msvideo,video/webm|max:512000',
-        ]);
-
-        // ✅ Nouvelle image principale
-        if ($request->hasFile('main_image')) {
-            if ($product->main_image &&
-                Storage::disk('public')->exists($product->main_image)) {
-                Storage::disk('public')->delete($product->main_image);
-            }
-
-            $path = $request->file('main_image')->store('products/main', 'public');
-            $validated['main_image'] = $path;
-        }
-
-        // ✅ Nouvelle vidéo (remplacer l'ancienne)
-        if ($request->hasFile('video')) {
-            if ($product->video &&
-                Storage::disk('public')->exists($product->video)) {
-                Storage::disk('public')->delete($product->video);
-            }
-
-            $path = $request->file('video')->store('products/videos', 'public');
-            $validated['video'] = $path;
-        }
-
-        // ✅ Mise à jour du produit
-        $product->update($validated);
-
-        // ✅ Ajouter les nouvelles images supplémentaires
-        if ($request->hasFile('extra_images')) {
-            foreach ($request->file('extra_images') as $image) {
-                $path = $image->store('products/images', 'public');
-                ProductImage::create([
-                    'product_id' => $product->id,
-                    'image_path' => $path,
-                ]);
-            }
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Produit mis à jour avec succès.',
-            'product' => $product->fresh()->load('images'),
-        ], 200);
+    // 🔒 Autorisation
+    if ($product->user_id !== Auth::id()) {
+        return response()->json(['error' => 'Non autorisé.'], 403);
     }
+
+    // ✅ Validation (avec les 5 nouveaux champs)
+    $validated = $request->validate([
+        'name'           => 'required|string|max:255',
+        'description'    => 'nullable|string',
+        'price'          => 'required|numeric|min:0',
+        'stock'          => 'required|integer|min:0',
+        'brand'          => 'nullable|string|max:255',
+        'discount_price' => 'nullable|numeric|min:0',
+        'category_id'    => 'required|integer|exists:categories,id',
+        'main_image'     => 'nullable|image|mimes:jpeg,png,jpg,webp|max:512000',
+        'extra_images'   => 'nullable|array|max:5',
+        'extra_images.*' => 'image|mimes:jpeg,png,jpg,webp|max:51200',
+        'video'          => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/x-msvideo,video/webm|max:512000',
+
+        
+        'colors'       => 'nullable|array',
+        'colors.*'     => 'string|max:50',
+        'sizes'        => 'nullable|array',
+        'sizes.*'      => 'string|max:50',
+        'condition'    => 'nullable|in:nouveau,comme_neuf,bon_etat,usage,reconditionne',
+        'min_quantity' => 'nullable|integer|min:1',
+        'audience'     => 'nullable|in:public,homme,femme,enfant',
+    ]);
+
+    // ✅ Nouvelle image principale
+    if ($request->hasFile('main_image')) {
+        if ($product->main_image &&
+            Storage::disk('public')->exists($product->main_image)) {
+            Storage::disk('public')->delete($product->main_image);
+        }
+        $path = $request->file('main_image')->store('products/main', 'public');
+        $validated['main_image'] = $path;
+    }
+
+    // ✅ Nouvelle vidéo
+    if ($request->hasFile('video')) {
+        if ($product->video &&
+            Storage::disk('public')->exists($product->video)) {
+            Storage::disk('public')->delete($product->video);
+        }
+        $path = $request->file('video')->store('products/videos', 'public');
+        $validated['video'] = $path;
+    }
+
+    // ✅ Mise à jour du produit
+    $product->update($validated);
+
+    // ✅ Nouvelles images supplémentaires
+    if ($request->hasFile('extra_images')) {
+        foreach ($request->file('extra_images') as $image) {
+            $path = $image->store('products/images', 'public');
+            ProductImage::create([
+                'product_id' => $product->id,
+                'image_path' => $path,
+            ]);
+        }
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Produit mis à jour avec succès.',
+        'product' => $product->fresh()->load('images'),
+    ], 200);
+}
 
     // ═══════════════════════════════════════════════════════════
     // 🎥 UPLOAD VIDEO — Endpoint dédié

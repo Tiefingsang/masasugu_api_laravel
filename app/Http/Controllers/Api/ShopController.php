@@ -62,7 +62,15 @@ class ShopController extends Controller
         'country'       => 'nullable|string|max:100',
         'address'       => 'nullable|string|max:255',
         'website'       => 'nullable|string|max:255',
-        'logo'          => 'nullable|string',
+
+        // ✅ Logo en fichier (plus en string)
+        'logo'                     => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
+
+        // 🆕 Nouveaux champs
+        'is_factory'               => 'nullable|boolean',
+        'banner'                   => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
+        'certification_documents'  => 'nullable|array',
+        'certification_documents.*'=> 'file|mimes:pdf,jpeg,png,jpg|max:10240',
     ]);
 
     if ($validator->fails()) {
@@ -71,7 +79,7 @@ class ShopController extends Controller
         ], 422);
     }
 
-    // 🔎 Vérifier si l’utilisateur a déjà une boutique
+    // 🔎 Vérifier si l'utilisateur a déjà une boutique
     $existingShop = Company::where('user_id', $request->user_id)->first();
     if ($existingShop) {
         return response()->json([
@@ -90,22 +98,44 @@ class ShopController extends Controller
         'is_verified'   => false,
         'contact_email' => $request->contact_email,
         'contact_phone' => $request->contact_phone,
-        'logo'          => $request->logo,
+        'is_factory'    => $request->is_factory ?? false,
     ]);
 
     // ✅ Mettre à jour l'utilisateur
     $user = \App\Models\User::find($request->user_id);
-
     if ($user) {
         $user->update([
             'role' => 'seller',
-            'company_id' => $shop->id, // relie le user à sa boutique
+            'company_id' => $shop->id,
         ]);
+    }
+
+    // ✅ Upload logo
+    if ($request->hasFile('logo')) {
+        $shop->update([
+            'logo' => $request->file('logo')->store('logos', 'public'),
+        ]);
+    }
+
+    // ✅ Upload bannière
+    if ($request->hasFile('banner')) {
+        $shop->update([
+            'banner' => $request->file('banner')->store('companies/banners', 'public'),
+        ]);
+    }
+
+    // ✅ Upload documents de certification
+    if ($request->hasFile('certification_documents')) {
+        $docs = [];
+        foreach ($request->file('certification_documents') as $file) {
+            $docs[] = $file->store('companies/certifications', 'public');
+        }
+        $shop->update(['certification_documents' => $docs]);
     }
 
     return response()->json([
         'message' => 'Boutique créée avec succès 🎉',
-        'shop' => $shop,
+        'shop' => $shop->fresh()->load('user'),
         'user' => $user,
     ], 201);
 }
@@ -171,75 +201,111 @@ class ShopController extends Controller
 
 
     public function update(Request $request, $id)
+{
+    $shop = Company::find($id);
+
+    if (!$shop) {
+        return response()->json(['message' => 'Boutique introuvable'], 404);
+    }
+
+    // ✅ Validation
+    $validated = $request->validate([
+        'name'           => 'required|string|max:255',
+        'description'    => 'nullable|string',
+        'contact_phone'  => 'nullable|string|max:50',
+        'contact_email'  => 'nullable|email|max:255',
+        'country'        => 'nullable|string|max:100',
+        'city'           => 'nullable|string|max:100',
+        'postal_code'    => 'nullable|string|max:20',
+        'address'        => 'nullable|string|max:255',
+        'website'        => 'nullable|string|max:255',
+        'facebook'       => 'nullable|string|max:255',
+        'instagram'      => 'nullable|string|max:255',
+        'tiktok'         => 'nullable|string|max:255',
+        'license_number' => 'nullable|string|max:100',
+
+        // 🆕 Nouveaux champs
+        'is_factory'               => 'nullable|boolean',
+        'banner'                   => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
+        'certification_documents'  => 'nullable|array',
+        'certification_documents.*'=> 'file|mimes:pdf,jpeg,png,jpg|max:10240',
+    ]);
+
+    // 🆕 Mapper camelCase → snake_case
+    if ($request->has('contactPhone') && !isset($validated['contact_phone'])) {
+        $validated['contact_phone'] = $request->input('contactPhone');
+    }
+    if ($request->has('contactEmail') && !isset($validated['contact_email'])) {
+        $validated['contact_email'] = $request->input('contactEmail');
+    }
+    if ($request->has('licenseNumber') && !isset($validated['license_number'])) {
+        $validated['license_number'] = $request->input('licenseNumber');
+    }
+    if ($request->has('postalCode') && !isset($validated['postal_code'])) {
+        $validated['postal_code'] = $request->input('postalCode');
+    }
+    if ($request->has('isFactory') && !isset($validated['is_factory'])) {
+        $validated['is_factory'] = $request->input('isFactory') === 'true'
+            || $request->input('isFactory') === '1'
+            || $request->input('isFactory') === true;
+    }
+
+    // 🆕 Gestion de la bannière
+    if ($request->hasFile('banner')) {
+        if ($shop->banner && !str_starts_with($shop->banner, 'http')) {
+            \Storage::disk('public')->delete($shop->banner);
+        }
+        $validated['banner'] = $request->file('banner')->store('companies/banners', 'public');
+    }
+
+    // 🆕 Gestion des documents de certification (ajout aux existants)
+    if ($request->hasFile('certification_documents')) {
+        $docs = $shop->certification_documents ?? [];
+        foreach ($request->file('certification_documents') as $file) {
+            $docs[] = $file->store('companies/certifications', 'public');
+        }
+        $validated['certification_documents'] = $docs;
+    }
+
+    $shop->update($validated);
+
+    // Gestion du logo (inchangé)
+    if ($request->hasFile('logo')) {
+        if ($shop->logo && !str_starts_with($shop->logo, 'http')) {
+            \Storage::disk('public')->delete($shop->logo);
+        }
+        $path = $request->file('logo')->store('logos', 'public');
+        $shop->logo = $path;
+        $shop->save();
+    }
+
+    return response()->json([
+        'message' => 'Boutique mise à jour avec succès',
+        'shop'    => $shop->fresh()->load('user'),
+    ]);
+}
+
+    // Mettre à jour le logo de la boutique
+ public function updateLogo(Request $request, $id)
     {
-        $shop = Company::find($id);
+        //  Utiliser Company au lieu de Shop (bug corrigé)
+        $shop = Company::findOrFail($id);
 
-        if (!$shop) {
-            return response()->json(['message' => 'Boutique introuvable'], 404);
-        }
-
-        // 🆕 Validation souple (tout optionnel sauf name)
-        $validated = $request->validate([
-            'name'           => 'required|string|max:255',
-            'description'    => 'nullable|string',
-            'contact_phone'  => 'nullable|string|max:50',
-            'contact_email'  => 'nullable|email|max:255',
-            'country'        => 'nullable|string|max:100',
-            'city'           => 'nullable|string|max:100',
-            'postal_code'    => 'nullable|string|max:20',
-            'address'        => 'nullable|string|max:255',
-            'website'        => 'nullable|string|max:255',
-            'facebook'       => 'nullable|string|max:255',
-            'instagram'      => 'nullable|string|max:255',
-            'tiktok'         => 'nullable|string|max:255',
-            'license_number' => 'nullable|string|max:100',
-        ]);
-
-        // 🆕 Mapper camelCase → snake_case si Flutter envoie contactPhone
-        if ($request->has('contactPhone') && !isset($validated['contact_phone'])) {
-            $validated['contact_phone'] = $request->input('contactPhone');
-        }
-        if ($request->has('contactEmail') && !isset($validated['contact_email'])) {
-            $validated['contact_email'] = $request->input('contactEmail');
-        }
-        if ($request->has('licenseNumber') && !isset($validated['license_number'])) {
-            $validated['license_number'] = $request->input('licenseNumber');
-        }
-        if ($request->has('postalCode') && !isset($validated['postal_code'])) {
-            $validated['postal_code'] = $request->input('postalCode');
-        }
-
-        $shop->update($validated);
-
-        // 🆕 Gestion du logo (upload multipart)
         if ($request->hasFile('logo')) {
-            // Supprimer l'ancien logo
+            // Supprimer l'ancien logo si présent
             if ($shop->logo && !str_starts_with($shop->logo, 'http')) {
                 \Storage::disk('public')->delete($shop->logo);
             }
 
             $path = $request->file('logo')->store('logos', 'public');
-            $shop->logo = $path; // 👈 stocke le chemin relatif
-            $shop->save();
-        }
-
-        return response()->json([
-            'message' => 'Boutique mise à jour avec succès',
-            'shop'    => $shop->fresh()->load('user'),
-        ]);
-    }
-
-    // Mettre à jour le logo de la boutique
-    public function updateLogo(Request $request, $id)
-    {
-        $shop = Shop::findOrFail($id);
-
-        if ($request->hasFile('logo')) {
-            $path = $request->file('logo')->store('shops/logos', 'public');
-            $shop->logo = '/storage/' . $path;
+            $shop->logo = $path;   // ✅ chemin relatif (le cast $appends calcule l'URL)
             $shop->save();
 
-            return response()->json(['message' => 'Logo mis à jour avec succès', 'logo' => $shop->logo], 200);
+            return response()->json([
+                'message' => 'Logo mis à jour avec succès',
+                'logo' => $shop->logo,
+                'logo_url' => $shop->logo_url,
+            ], 200);
         }
 
         return response()->json(['message' => 'Aucun fichier reçu'], 400);
@@ -328,6 +394,37 @@ class ShopController extends Controller
             'recent' => $recentProducts,
             'best_sellers' => $bestSellers,
         ]);
+    }
+
+
+    public function deleteCertificationDocument(Request $request, $id)
+    {
+        $shop = Company::find($id);
+
+        if (!$shop) {
+            return response()->json(['message' => 'Boutique introuvable'], 404);
+        }
+
+        $documentPath = $request->input('document_path');
+        if (!$documentPath) {
+            return response()->json(['message' => 'Document non spécifié'], 422);
+        }
+
+        $docs = $shop->certification_documents ?? [];
+
+        if (($key = array_search($documentPath, $docs)) !== false) {
+            \Storage::disk('public')->delete($documentPath);
+            unset($docs[$key]);
+            $shop->certification_documents = array_values($docs);
+            $shop->save();
+
+            return response()->json([
+                'message' => 'Document supprimé',
+                'shop' => $shop->fresh(),
+            ]);
+        }
+
+        return response()->json(['message' => 'Document introuvable'], 404);
     }
 
 

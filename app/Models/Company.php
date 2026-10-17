@@ -7,35 +7,44 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Illuminate\Notifications\Notifiable;
 
-
 class Company extends Model
 {
     use HasFactory;
     use Notifiable;
 
-    protected $appends = ['logo_url', 'whatsapp_phone'];
-    
+    protected $appends = ['logo_url', 'whatsapp_phone', 'banner_url'];
+
     protected $fillable = [
         'user_id',
         'name',
         'slug',
         'description',
         'logo',
+        'banner',
         'country',
         'city',
         'postal_code',
         'address',
         'license_number',
+        'certification_documents',
         'website',
         'facebook',
         'instagram',
         'tiktok',
         'is_verified',
+        'is_factory',
         'is_active',
         'status',
+        'payment_methods',
         'contact_email',
         'contact_phone',
         'shop_category_id',
+    ];
+
+    // ✅ Un seul $casts, fusionné
+    protected $casts = [
+        'certification_documents' => 'array',
+        'payment_methods' => 'array',
     ];
 
     /**
@@ -46,16 +55,20 @@ class Company extends Model
         return $this->belongsTo(User::class);
     }
 
-    /* public function category()
-    {
-        return $this->belongsTo(Category::class);
-    } */
-
     public function category()
     {
         return $this->belongsTo(ShopCategory::class, 'shop_category_id');
     }
 
+    public function products()
+    {
+        return $this->hasMany(Product::class);
+    }
+
+    public function orders()
+    {
+        return $this->hasMany(Order::class);
+    }
 
     /**
      * Génération automatique du slug à partir du nom
@@ -72,7 +85,7 @@ class Company extends Model
     }
 
     /**
-     * Scope : récupérer uniquement les boutiques actives et validées
+     * Scope : boutiques actives et validées
      */
     public function scopeActive($query)
     {
@@ -80,25 +93,7 @@ class Company extends Model
     }
 
     /**
-     * Une boutique a plusieurs produits
-     */
-
-    public function products()
-    {
-        return $this->hasMany(Product::class);
-    }
-
-    /**
-     * Une boutique a plusieurs commandes
-     */
-
-    public function orders()
-    {
-        return $this->hasMany(Order::class);
-    }
-
-        /**
-     * ✅ Accesseur : retourne l'URL complète du logo
+     * ✅ URL complète du logo
      */
     public function getLogoUrlAttribute(): ?string
     {
@@ -106,23 +101,33 @@ class Company extends Model
             return null;
         }
 
-        // Si c'est déjà une URL absolue, la retourner telle quelle
         if (str_starts_with($this->logo, 'http')) {
             return $this->logo;
         }
 
-        // Sinon, construire l'URL avec le storage
         return 'https://api.masasugu.com/storage/' . ltrim($this->logo, '/');
     }
 
     /**
-     * 📞 Numéro WhatsApp effectif de la boutique
-     * Priorité : contact_phone → user.phone → null
+     * ✅ URL complète de la bannière
      */
-   /**
- * 📞 Numéro WhatsApp effectif de la boutique
- * Priorité : contact_phone → user.phone
- */
+    public function getBannerUrlAttribute(): ?string
+    {
+        if (!$this->banner) {
+            return null;
+        }
+
+        if (str_starts_with($this->banner, 'http')) {
+            return $this->banner;
+        }
+
+        return 'https://api.masasugu.com/storage/' . ltrim($this->banner, '/');
+    }
+
+    /**
+     * 📞 Numéro WhatsApp effectif de la boutique
+     * Priorité : contact_phone → user.phone
+     */
     public function getWhatsappPhoneAttribute(): ?string
     {
         if (!empty($this->contact_phone)) {
@@ -133,11 +138,4 @@ class Company extends Model
         }
         return null;
     }
-
-
-
-
-
-
-
 }
