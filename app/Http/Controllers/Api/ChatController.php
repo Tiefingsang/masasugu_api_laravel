@@ -133,8 +133,16 @@ class ChatController extends Controller
             'conversation_id' => $conversation->id,
             'sender_id'       => $user->id,
             'receiver_id'     => $receiverId,
-            'content'         => $request->content,
-            'type'            => 'text',
+            'content'         => $request->caption ?? '',
+            'type'            => $request->type,
+            'metadata'        => [
+                'path' => $path,
+                'url'  => asset('storage/' . $path),
+                'name' => $file->getClientOriginalName(),
+                'size' => $file->getSize(),
+               
+                'mime' => $request->type === 'audio' ? 'audio/wav' : $file->getMimeType(),
+            ],
         ]);
 
         $conversation->update([
