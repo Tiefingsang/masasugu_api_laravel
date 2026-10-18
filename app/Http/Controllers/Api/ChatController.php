@@ -15,7 +15,6 @@ class ChatController extends Controller
 {
     // ═══════════════════════════════════════════════════════════
     // 📋 LISTE DES CONVERSATIONS
-    // ✅ CORRIGÉ : filtre par receiver_id dans messages
     // ═══════════════════════════════════════════════════════════
     public function index()
     {
@@ -24,8 +23,8 @@ class ChatController extends Controller
         $conversations = Conversation::with([
             'user',
             'company.user',
-            'messages' => function ($q) use ($user) {   // ✅ use ($user)
-                $q->where('receiver_id', $user->id)      // ✅ NOUVEAU
+            'messages' => function ($q) use ($user) {
+                $q->where('receiver_id', $user->id)
                   ->whereNull('read_at');
             }
         ])
@@ -54,7 +53,7 @@ class ChatController extends Controller
                     'last_message' => $c->last_message,
                     'last_at' => $c->last_at,
                     'receiver_id' => $receiver->id,
-                    'unread_count' => $c->messages->count(),   // ✅ Maintenant = messages reçus non lus
+                    'unread_count' => $c->messages->count(),
                 ];
             })
         );
@@ -105,7 +104,7 @@ class ChatController extends Controller
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 📤 ENVOYER UN MESSAGE
+    // 📤 ENVOYER UN MESSAGE TEXTE (Corrigé)
     // ═══════════════════════════════════════════════════════════
     public function send(Request $request)
     {
@@ -133,16 +132,8 @@ class ChatController extends Controller
             'conversation_id' => $conversation->id,
             'sender_id'       => $user->id,
             'receiver_id'     => $receiverId,
-            'content'         => $request->caption ?? '',
-            'type'            => $request->type,
-            'metadata'        => [
-                'path' => $path,
-                'url'  => asset('storage/' . $path),
-                'name' => $file->getClientOriginalName(),
-                'size' => $file->getSize(),
-               
-                'mime' => $request->type === 'audio' ? 'audio/wav' : $file->getMimeType(),
-            ],
+            'content'         => $request->content,
+            'type'            => 'text',
         ]);
 
         $conversation->update([
@@ -190,7 +181,7 @@ class ChatController extends Controller
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 📎 UPLOAD PIÈCE JOINTE
+    // 📎 UPLOAD PIÈCE JOINTE (Corrigé pour le WAV)
     // ═══════════════════════════════════════════════════════════
     public function upload(Request $request)
     {
@@ -223,7 +214,13 @@ class ChatController extends Controller
         };
 
         $file = $request->file('file');
-        $path = $file->store($folder, 'public');
+
+        // ✅ 1. On récupère l'extension originale (.wav)
+        $extension = $file->getClientOriginalExtension();
+        // ✅ 2. On génère un nom unique avec la bonne extension
+        $filename = uniqid() . '.' . $extension;
+        // ✅ 3. On stocke avec ce nom précis
+        $path = $file->storeAs($folder, $filename, 'public');
 
         $msg = Message::create([
             'conversation_id' => $conversation->id,
@@ -236,7 +233,8 @@ class ChatController extends Controller
                 'url'  => asset('storage/' . $path),
                 'name' => $file->getClientOriginalName(),
                 'size' => $file->getSize(),
-                'mime' => $file->getMimeType(),
+                // ✅ 4. On force le bon type MIME
+                'mime' => $request->type === 'audio' ? 'audio/wav' : $file->getMimeType(),
             ],
         ]);
 
