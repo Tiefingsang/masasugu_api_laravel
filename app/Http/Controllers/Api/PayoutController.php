@@ -35,8 +35,6 @@ class PayoutController extends Controller
 
     /**
      * 📋 GET /api/payout-methods
-     *
-     * Liste les moyens de retrait du vendeur.
      */
     public function indexMethods()
     {
@@ -102,6 +100,14 @@ class PayoutController extends Controller
 
         $user = Auth::user();
 
+        // Si c'est le premier moyen, il devient par défaut
+        $isFirstMethod = PayoutMethod::where('seller_id', $user->id)->count() === 0;
+
+        // Si is_default est true, on retire le défaut des autres
+        if ($request->is_default || $isFirstMethod) {
+            PayoutMethod::where('seller_id', $user->id)->update(['is_default' => false]);
+        }
+
         $method = PayoutMethod::create([
             'seller_id' => $user->id,
             'type' => $request->type,
@@ -111,7 +117,7 @@ class PayoutController extends Controller
             'bank_name' => $request->bank_name,
             'country_code' => $request->country_code ?? $user->country ?? 'ML',
             'currency' => 'XOF',
-            'is_default' => $request->is_default ?? false,
+            'is_default' => $request->is_default ?? $isFirstMethod,
             'is_verified' => false,
             'is_active' => true,
         ]);
@@ -150,7 +156,19 @@ class PayoutController extends Controller
             return response()->json(['error' => 'Moyen de retrait introuvable'], 404);
         }
 
-        $method->update(['is_active' => false]);
+        $wasDefault = $method->is_default;
+
+        $method->update(['is_active' => false, 'is_default' => false]);
+
+        // Si c'était le moyen par défaut, on en désigne un autre
+        if ($wasDefault) {
+            $newDefault = PayoutMethod::where('seller_id', $user->id)
+                ->where('is_active', true)
+                ->first();
+            if ($newDefault) {
+                $newDefault->update(['is_default' => true]);
+            }
+        }
 
         return response()->json(['success' => true, 'message' => 'Moyen de retrait supprimé']);
     }
@@ -170,11 +188,12 @@ class PayoutController extends Controller
     {
         $request->validate([
             'payout_method_id' => 'required|exists:payout_methods,id',
-            'amount' => 'required|numeric|min:1',
+            'amount' => 'required|numeric|min:1000', // Minimum 1000 XOF
         ]);
 
         $user = Auth::user();
 
+        // 1. Récupérer le wallet et le moyen de retrait
         $wallet = $this->walletManager->getOrCreateWallet($user->id);
         $method = PayoutMethod::where('id', $request->payout_method_id)
             ->where('seller_id', $user->id)
@@ -185,7 +204,15 @@ class PayoutController extends Controller
             return response()->json(['error' => 'Moyen de retrait introuvable'], 404);
         }
 
+        // 2. Vérifier le solde disponible
+        if ($wallet->available_balance < $request->amount) {
+            return response()->json([
+                'error' => 'Solde insuffisant. Votre solde disponible est de ' . $wallet->available_balance . ' XOF.'
+            ], 400);
+        }
+
         try {
+            // 3. Créer la demande de retrait (PayoutManager gère l'appel PayDunya)
             $payout = $this->payoutManager->requestPayout($wallet, $method, (float) $request->amount);
 
             return response()->json([
@@ -207,6 +234,12 @@ class PayoutController extends Controller
                 'success' => false,
                 'error' => $e->getMessage(),
             ], 400);
+        } catch (\Exception $e) {
+            Log::error('❌ Erreur retrait', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'error' => 'Erreur lors du retrait : ' . $e->getMessage(),
+            ], 500);
         }
     }
 
@@ -247,5 +280,30 @@ class PayoutController extends Controller
                 'total' => $payouts->total(),
             ],
         ]);
+    }
+
+
+        public function handlePayDunyaPayoutWebhook(Request $request)
+    {
+        $payload = $request->all();
+        Log::info('🔔 Webhook Payout PayDunya reçu', $payload);
+
+        // Vérifier la signature (optionnel mais recommandé)
+        $expectedHash = hash('sha512', config('services.paydunya.master_key'));
+        if (isset($payload['hash']) && $payload['hash'] !== $expectedHash) {
+            return response('Invalid signature', 403);
+        }
+
+        $payoutId = $payload['custom_data']['payout_id'] ?? null;
+        $status = $payload['status'] ?? null;
+
+        if ($payoutId && $status === 'completed') {
+            $payout = Payout::where('payout_id', $payoutId)->first();
+            if ($payout && $payout->status !== 'completed') {
+                $this->payoutManager->complete($payout, $payload['disburse_token'] ?? null);
+            }
+        }
+
+        return response('OK', 200);
     }
 }

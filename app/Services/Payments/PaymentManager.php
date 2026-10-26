@@ -36,6 +36,7 @@ class PaymentManager
     {
         $this->gateways = [
             'orange' => \App\Services\Payments\Gateways\OrangeMoneyGateway::class,
+            'paydunya' => \App\Services\Payments\Gateways\PayDunyaGateway::class, 
             // 'cinetpay'    => \App\Services\Payments\Gateways\CinetPayGateway::class,
             // 'flutterwave' => \App\Services\Payments\Gateways\FlutterwaveGateway::class,
             // 'stripe'      => \App\Services\Payments\Gateways\StripeGateway::class,

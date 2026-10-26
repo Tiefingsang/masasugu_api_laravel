@@ -13,6 +13,7 @@ use App\Services\Payments\CommissionEngine;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+ use App\Services\FcmService;
 
 /**
  * PaymentController — Gestion des paiements côté client
@@ -231,4 +232,98 @@ class PaymentController extends Controller
             ] : null,
         ]);
     }
+
+
+        /**
+     * 🔔 POST /api/payments/webhook/paydunya
+     *
+     * Webhook appelé par PayDunya après un paiement réussi.
+     */
+   // Ajoutez en haut
+
+public function handlePayDunyaWebhook(Request $request)
+{
+    $payload = $request->all();
+    Log::info('🔔 Webhook PayDunya reçu', $payload);
+
+    try {
+        $result = $this->manager->handleWebhook('paydunya', $payload);
+
+        $orderId = $result['order_id'] ?? null;
+        $status = $result['status'] ?? null;
+
+        if ($orderId && $status === 'completed') {
+            $order = Order::with('items', 'user')->find($orderId);
+
+            if ($order && $order->payment_status !== 'paid') {
+                // 1. Mettre à jour la commande
+                $order->update([
+                    'payment_status' => 'paid',
+                    'payment_method' => 'paydunya',
+                ]);
+
+                // 2. Mettre à jour la transaction
+                $transaction = $order->transactions()->latest()->first();
+                if ($transaction) {
+                    $transaction->update([
+                        'status' => 'completed',
+                        'paid_at' => now(),
+                    ]);
+                }
+
+                // 3. Créditer le solde "en attente" du vendeur (Escrow)
+                foreach ($order->itemsBySeller() as $sellerId => $items) {
+                    $sellerTotal = $items->sum('subtotal');
+                    $netSellerAmount = $sellerTotal * 0.90; // 10% commission
+
+                    $wallet = \App\Models\SellerWallet::firstOrCreate(['seller_id' => $sellerId]);
+                    $wallet->increment('pending_balance', $netSellerAmount);
+
+                    \App\Models\WalletTransaction::create([
+                        'seller_id' => $sellerId,
+                        'order_id' => $order->id,
+                        'type' => 'sale_pending',
+                        'amount' => $netSellerAmount,
+                        'status' => 'pending',
+                        'description' => 'Vente en attente de validation (Commande #' . $order->id . ')'
+                    ]);
+                }
+
+                // ✅ NOUVEAU : Envoi des notifications FCM
+                $fcm = new FcmService();
+
+                // Notifier le client
+                if ($order->user) {
+                    $fcm->sendToUser(
+                        $order->user,
+                        "Paiement confirmé ✅",
+                        "Votre commande #{$order->id} a bien été payée. Le vendeur prépare votre colis.",
+                        ['type' => 'payment_success', 'order_id' => (string)$order->id]
+                    );
+                }
+
+                // Notifier les vendeurs
+                foreach ($order->itemsBySeller() as $sellerId => $items) {
+                    $seller = \App\Models\User::find($sellerId);
+                    if ($seller) {
+                        $fcm->sendToUser(
+                            $seller,
+                            "Nouvelle commande payée 🛍️",
+                            "Commande #{$order->id} payée. Les fonds sont sécurisés par Masasugu.",
+                            ['type' => 'new_order', 'order_id' => (string)$order->id]
+                        );
+                    }
+                }
+
+                Log::info('✅ Paiement PayDunya validé et notifications envoyées pour la commande ' . $orderId);
+            }
+        }
+
+        return response('OK', 200);
+
+    } catch (\Exception $e) {
+        Log::error('❌ Erreur Webhook PayDunya: ' . $e->getMessage());
+        return response('Internal Error', 500);
+    }
+}
 }

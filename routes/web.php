@@ -54,7 +54,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         });
 
             // ═══════════════════════════════════════════════
-            // 🚩 SIGNALEMENTS / MODÉRATION
+            //  SIGNALEMENTS / MODÉRATION
             // ═══════════════════════════════════════════════
             Route::get('/reports', [\App\Http\Controllers\Admin\ReportController::class, 'index'])->name('reports.index');
             Route::get('/reports/{id}', [\App\Http\Controllers\Admin\ReportController::class, 'show'])->name('reports.show');

@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Log;
  * 1. Vendeur demande un retrait
  * 2. Admin reçoit notification
  * 3. Admin valide → Processing
- * 4. Provider envoie l'argent → Completed
+ * 4. PayDunya envoie l'argent → Completed
  * 5. Vendeur reçoit notification
  */
 class PayoutManager
@@ -98,7 +98,7 @@ class PayoutManager
     }
 
     /**
-     * 🔄 Traiter un payout (admin valide)
+     * 🔄 Traiter un payout (admin valide manuellement le passage en processing)
      */
     public function process(Payout $payout, User $admin): void
     {
@@ -119,7 +119,7 @@ class PayoutManager
     }
 
     /**
-     * ✅ Marquer comme complété
+     * ✅ Marquer comme complété ET envoyer l'argent via PayDunya
      */
     public function complete(Payout $payout, ?string $providerReference = null): void
     {
@@ -127,20 +127,49 @@ class PayoutManager
             throw new PaymentException("Ce payout ne peut pas être complété", 400);
         }
 
-        DB::transaction(function () use ($payout, $providerReference) {
+        // 1. Appeler PayDunya Disburse
+        $gateway = new \App\Services\Payments\Gateways\PayDunyaGateway();
+
+        // Déterminer le canal en fonction du type du moyen de retrait et du pays du vendeur
+        $country = strtolower($payout->wallet->seller->country ?? 'ml');
+        $channel = match ($payout->method) {
+            'orange_money' => 'orange_money_' . $country,
+            'moov_money'   => 'moov_money_' . $country,
+            'wave'         => 'wave_' . $country,
+            'mtn_momo'     => 'mtn_' . $country,
+            default        => $payout->method,
+        };
+
+        $result = $gateway->disburse([
+            'amount' => $payout->amount,
+            'phone' => $payout->destination,
+            'channel' => $channel,
+            'name' => $payout->holder_name ?? 'Vendeur Masasugu',
+            'payout_id' => $payout->payout_id,
+        ]);
+
+        if (!$result['success']) {
+            // Si PayDunya échoue, on lève une exception et on rembourse via fail()
+            $this->fail($payout, $result['message'] ?? 'Erreur PayDunya lors du déboursement');
+            throw new PaymentException(
+                'Erreur PayDunya : ' . ($result['message'] ?? 'Inconnue'),
+                400
+            );
+        }
+
+        // 2. Si succès, marquer comme complété et mettre à jour le wallet
+        DB::transaction(function () use ($payout, $result, $providerReference) {
             $payout->update([
                 'status' => 'completed',
-                'provider_reference' => $providerReference ?? $payout->provider_reference,
+                'provider_reference' => $result['reference'] ?? $providerReference,
                 'processed_at' => $payout->processed_at ?? now(),
                 'completed_at' => now(),
             ]);
 
-            // Mettre à jour le wallet
             $wallet = $payout->wallet;
             if ($wallet) {
                 $wallet->increment('total_withdrawn', $payout->amount);
 
-                // Enregistrer la transaction wallet
                 \App\Models\WalletTransaction::create([
                     'wallet_id' => $wallet->id,
                     'seller_id' => $payout->seller_id,
@@ -156,19 +185,18 @@ class PayoutManager
                 ]);
             }
 
-            Log::info('✅ Payout complété', [
+            Log::info('✅ Payout complété et argent envoyé', [
                 'payout_id' => $payout->id,
                 'amount' => $payout->amount,
-                'reference' => $providerReference,
+                'reference' => $result['reference'] ?? null,
             ]);
 
-            // Notifier le vendeur
             $this->notifier->notifyPayoutCompleted($payout);
         });
     }
 
     /**
-     * ❌ Marquer comme échoué
+     * ❌ Marquer comme échoué (et rembourser le wallet)
      */
     public function fail(Payout $payout, string $reason): void
     {
@@ -182,7 +210,6 @@ class PayoutManager
             // Rembourser le wallet (le HOLD est annulé)
             $wallet = $payout->wallet;
             if ($wallet) {
-                // Re-créditer le montant (reverse du HOLD)
                 $wallet->increment('available_balance', $payout->amount);
                 $wallet->update(['last_transaction_at' => now()]);
 
@@ -206,7 +233,6 @@ class PayoutManager
                 'reason' => $reason,
             ]);
 
-            // Notifier le vendeur
             $this->notifier->notifyPayoutFailed($payout, $reason);
         });
     }
@@ -226,7 +252,6 @@ class PayoutManager
                 'rejection_reason' => $reason,
             ]);
 
-            // Rembourser le wallet
             $wallet = $payout->wallet;
             if ($wallet) {
                 $wallet->increment('available_balance', $payout->amount);

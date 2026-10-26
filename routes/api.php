@@ -102,6 +102,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/shops/{id}/certification-document', [ShopController::class, 'deleteCertificationDocument']);
 
 
+    Route::post('/payments/webhook/paydunya', [PaymentController::class, 'handlePayDunyaWebhook']);
+    Route::post('/payments/webhook/paydunya-payout', [PayoutController::class, 'handlePayDunyaPayoutWebhook']);
+
     //products routes
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{id}', [ProductController::class, 'update']);

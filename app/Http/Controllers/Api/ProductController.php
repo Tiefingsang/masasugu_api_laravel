@@ -330,7 +330,7 @@ class ProductController extends Controller
         'extra_images.*' => 'image|mimes:jpeg,png,jpg,webp|max:51200',
         'video'          => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/x-msvideo,video/webm|max:512000',
 
-        
+
         'colors'       => 'nullable|array',
         'colors.*'     => 'string|max:50',
         'sizes'        => 'nullable|array',

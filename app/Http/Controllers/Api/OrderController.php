@@ -288,16 +288,88 @@ class OrderController extends Controller
 
     // ═══════════════════════════════════════════════════════════
     // 🔄 CHANGEMENT DE STATUT + NOTIFICATION
+    // // ═══════════════════════════════════════════════════════════
+    // public function updateStatus(Request $request, $id)
+    // {
+    //     $order = Order::with(['user', 'items.product'])->findOrFail($id);
+
+    //     $validated = $request->validate([
+    //         'status' => 'required|in:pending,confirmed,delivered,cancelled,en_attente,confirmee,livree,annulee,expediee',
+    //     ]);
+
+    //     // Mapping FR → EN
+    //     $map = [
+    //         'pending'   => 'pending',
+    //         'confirmed' => 'confirmed',
+    //         'delivered' => 'delivered',
+    //         'cancelled' => 'cancelled',
+    //         'en_attente' => 'pending',
+    //         'confirmee'  => 'confirmed',
+    //         'livree'     => 'delivered',
+    //         'annulee'    => 'cancelled',
+    //         'expediee'   => 'shipped',
+    //     ];
+
+    //     $newStatus = $map[$validated['status']] ?? $validated['status'];
+    //     $oldStatus = $order->status;
+
+    //     if ($oldStatus === $newStatus) {
+    //         return response()->json([
+    //             'message' => 'Statut inchangé',
+    //             'order'   => $order,
+    //         ]);
+    //     }
+
+    //     $order->status = $newStatus;
+    //     $order->save();
+
+    //     // 🔔 Notification FCM selon le nouveau statut
+    //     try {
+    //         $fcm = new FcmService();
+
+    //         switch ($newStatus) {
+    //             case 'confirmed':
+    //                 $fcm->notifyOrderConfirmed($order);
+    //                 break;
+    //             case 'shipped':
+    //                 $fcm->notifyOrderShipped($order);
+    //                 break;
+    //             case 'delivered':
+    //                 $fcm->notifyOrderDelivered($order);
+    //                 break;
+    //             case 'cancelled':
+    //                 $fcm->notifyOrderCancelled($order);
+    //                 break;
+    //         }
+
+    //         Log::info('✅ Statut changé + FCM', [
+    //             'order_id'   => $order->id,
+    //             'old_status' => $oldStatus,
+    //             'new_status' => $newStatus,
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         Log::warning('⚠️ Erreur FCM', ['error' => $e->getMessage()]);
+    //     }
+
+    //     return response()->json([
+    //         'message' => 'Statut mis à jour',
+    //         'order'   => $order->fresh(),
+    //     ]);
+    // }
+
+
+        // ═══════════════════════════════════════════════════════════
+    // 🔄 CHANGEMENT DE STATUT + NOTIFICATION + ESCROW
     // ═══════════════════════════════════════════════════════════
     public function updateStatus(Request $request, $id)
     {
+        // On charge les items et les produits pour pouvoir calculer les montants
         $order = Order::with(['user', 'items.product'])->findOrFail($id);
 
         $validated = $request->validate([
             'status' => 'required|in:pending,confirmed,delivered,cancelled,en_attente,confirmee,livree,annulee,expediee',
         ]);
 
-        // Mapping FR → EN
         $map = [
             'pending'   => 'pending',
             'confirmed' => 'confirmed',
@@ -320,6 +392,51 @@ class OrderController extends Controller
             ]);
         }
 
+        // ═══════════════════════════════════════════════════════
+        // 🔥 ESCROW : SI ON PASSE À "DELIVERED", ON DÉBLOQUE L'ARGENT
+        // ═══════════════════════════════════════════════════════
+        if ($newStatus === 'delivered' && $oldStatus !== 'delivered') {
+            DB::transaction(function () use ($order) {
+                // On regroupe les items par vendeur
+                $itemsBySeller = $order->items->groupBy('seller_id');
+
+                foreach ($itemsBySeller as $sellerId => $items) {
+                    if (!$sellerId) continue;
+
+                    // Calcul du montant net pour ce vendeur (moins la commission)
+                    $sellerTotal = $items->sum(function ($item) {
+                        return $item->price * $item->quantity;
+                    });
+                    $netAmount = $sellerTotal * 0.90; // 10% de commission
+
+                    // Récupérer le portefeuille du vendeur
+                    $wallet = \App\Models\SellerWallet::firstOrCreate(['seller_id' => $sellerId]);
+
+                    // On enlève du "pending" et on ajoute au "disponible"
+                    if ($wallet->pending_balance >= $netAmount) {
+                        $wallet->decrement('pending_balance', $netAmount);
+                    } else {
+                        // Sécurité : si le pending est inférieur (arrondi), on met à 0
+                        $wallet->update(['pending_balance' => 0]);
+                    }
+                    $wallet->increment('available_balance', $netAmount);
+
+                    // Mettre à jour l'historique des transactions
+                    \App\Models\WalletTransaction::where('order_id', $order->id)
+                        ->where('seller_id', $sellerId)
+                        ->where('status', 'pending')
+                        ->update([
+                            'status' => 'completed',
+                            'description' => 'Vente validée (statut mis à jour)',
+                        ]);
+                }
+            });
+
+            Log::info('💰 Fonds débloqués (Escrow) pour la commande', ['order_id' => $order->id]);
+        }
+        // ═══════════════════════════════════════════════════════
+
+        // Mise à jour du statut
         $order->status = $newStatus;
         $order->save();
 
@@ -336,6 +453,20 @@ class OrderController extends Controller
                     break;
                 case 'delivered':
                     $fcm->notifyOrderDelivered($order);
+
+                    // ✅ NOUVEAU : Notifier aussi le vendeur que son argent est débloqué
+                    $itemsBySeller = $order->items->groupBy('seller_id');
+                    foreach ($itemsBySeller as $sellerId => $items) {
+                        $seller = User::find($sellerId);
+                        if ($seller) {
+                            $fcm->sendToUser(
+                                $seller,
+                                "Fonds débloqués 💰",
+                                "La livraison de la commande #{$order->id} a été validée. Votre argent est disponible.",
+                                ['type' => 'funds_released', 'order_id' => (string)$order->id]
+                            );
+                        }
+                    }
                     break;
                 case 'cancelled':
                     $fcm->notifyOrderCancelled($order);
@@ -356,7 +487,6 @@ class OrderController extends Controller
             'order'   => $order->fresh(),
         ]);
     }
-
     // ═══════════════════════════════════════════════════════════
     // 📊 STATISTIQUES
     // ═══════════════════════════════════════════════════════════
