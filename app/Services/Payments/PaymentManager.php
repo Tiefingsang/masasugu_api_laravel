@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
  * PaymentManager — Orchestrateur des paiements
  *
  * Point d'entrée UNIQUE pour tous les paiements.
- * Route vers le bon gateway selon le pays et le moyen choisi.
+ * Tous les paiements passent par PayDunya, qui gère tous les opérateurs.
  */
 class PaymentManager
 {
@@ -29,14 +29,11 @@ class PaymentManager
 
     /**
      * Enregistrer les gateways disponibles
-     *
-     * Ajouter un gateway = ajouter 1 ligne ici
      */
     protected function registerGateways(): void
     {
         $this->gateways = [
-            'orange' => \App\Services\Payments\Gateways\OrangeMoneyGateway::class,
-            'paydunya' => \App\Services\Payments\Gateways\PayDunyaGateway::class, 
+            'paydunya' => \App\Services\Payments\Gateways\PayDunyaGateway::class,
             // 'cinetpay'    => \App\Services\Payments\Gateways\CinetPayGateway::class,
             // 'flutterwave' => \App\Services\Payments\Gateways\FlutterwaveGateway::class,
             // 'stripe'      => \App\Services\Payments\Gateways\StripeGateway::class,
@@ -59,34 +56,45 @@ class PaymentManager
 
     /**
      * Initialiser un paiement
+     *
+     * ✅ Tous les paiements passent par PayDunya.
+     * Le $gatewayCode est utilisé comme "channel" (ex: moov-money-ml, card, wave-ci)
      */
     public function initiate(Order $order, string $gatewayCode, array $data = []): array
     {
-        // 1. Récupérer la config du gateway
+        // ✅ On force le gateway à 'paydunya'
+        $mappedGateway = 'paydunya';
+
+        // 1. Vérifier que PayDunya est actif pour ce pays
         $gatewayModel = PaymentGateway::where('country_code', $order->country)
-            ->where('gateway', $gatewayCode)
+            ->where('gateway', 'paydunya')
             ->where('is_active', true)
             ->first();
 
+        // Si PayDunya n'est pas configuré pour ce pays, on lève une erreur
         if (!$gatewayModel) {
             throw new PaymentException(
-                "Gateway {$gatewayCode} non disponible pour le pays {$order->country}",
+                "PayDunya n'est pas disponible pour le pays {$order->country}",
                 400,
-                ['country' => $order->country, 'gateway' => $gatewayCode]
+                ['country' => $order->country]
             );
         }
 
-        // 2. Récupérer l'instance du gateway
-        $gatewayInstance = $this->resolveGateway($gatewayCode);
+        // 2. Récupérer l'instance du gateway PayDunya
+        $gatewayInstance = $this->resolveGateway($mappedGateway);
 
-        // 3. Appeler le gateway
-        Log::info("💳 Initiation paiement", [
+        // 3. Ajouter le channel (le moyen de paiement spécifique)
+        // Ce channel sera transmis à PayDunya pour qu'il affiche le bon opérateur
+        $data['channel'] = $gatewayCode;
+
+        Log::info("💳 Initiation paiement via PayDunya", [
             'order_id' => $order->id,
-            'gateway' => $gatewayCode,
+            'channel' => $gatewayCode,
             'amount' => $order->total,
             'country' => $order->country,
         ]);
 
+        // 4. Appeler le gateway PayDunya
         $result = $gatewayInstance->initialize($order, $data);
 
         if (!$result['success']) {
@@ -105,7 +113,7 @@ class PaymentManager
      */
     public function verify(string $gatewayCode, string $transactionId): array
     {
-        $gatewayInstance = $this->resolveGateway($gatewayCode);
+        $gatewayInstance = $this->resolveGateway('paydunya');
         return $gatewayInstance->verify($transactionId);
     }
 
@@ -114,7 +122,7 @@ class PaymentManager
      */
     public function refund(string $gatewayCode, string $transactionId, ?float $amount = null): array
     {
-        $gatewayInstance = $this->resolveGateway($gatewayCode);
+        $gatewayInstance = $this->resolveGateway('paydunya');
         return $gatewayInstance->refund($transactionId, $amount);
     }
 
@@ -123,7 +131,7 @@ class PaymentManager
      */
     public function handleWebhook(string $gatewayCode, array $payload, array $headers = []): array
     {
-        $gatewayInstance = $this->resolveGateway($gatewayCode);
+        $gatewayInstance = $this->resolveGateway('paydunya');
 
         // 1. Vérifier la signature
         if (!$gatewayInstance->verifyWebhookSignature($payload, $headers)) {
@@ -143,7 +151,7 @@ class PaymentManager
      */
     public function payout(string $gatewayCode, array $data): array
     {
-        $gatewayInstance = $this->resolveGateway($gatewayCode);
+        $gatewayInstance = $this->resolveGateway('paydunya');
         return $gatewayInstance->payout($data);
     }
 
