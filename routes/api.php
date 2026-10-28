@@ -31,6 +31,10 @@ Route::post('/products/search-by-keywords', [ProductController::class, 'searchBy
 
 
 
+   Route::get('/payment-methods', [\App\Http\Controllers\Api\PaymentController::class, 'methods']);
+    // Pays supportés
+    Route::get('/countries', [\App\Http\Controllers\Api\CountryController::class, 'index']);
+
 Route::get('/products/{id}', [ProductController::class, 'show']);
 
 Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
@@ -260,11 +264,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // ═══════════════════════════════════════════════
 
 
-    // Pays supportés
-    Route::get('/countries', [\App\Http\Controllers\Api\CountryController::class, 'index']);
+
 
     // Moyens de paiement par pays
-    Route::get('/payment-methods', [\App\Http\Controllers\Api\PaymentController::class, 'methods']);
+
 
     // Initier un paiement
     Route::post('/payments/initiate', [\App\Http\Controllers\Api\PaymentController::class, 'initiate']);
