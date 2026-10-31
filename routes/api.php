@@ -67,13 +67,13 @@ Route::get('/payments/{gateway}/cancel', [\App\Http\Controllers\Api\WebhookContr
 // ═══ GOOGLE SIGN-IN ═══
 Route::post('/auth/google', [\App\Http\Controllers\Api\AuthController::class, 'googleLogin']);
 
-// ═══════════════════════════════════════════════
-// 🔐 RESET PASSWORD — Route publique
-// ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════════
+    // 🔐 RESET PASSWORD — Route publique
+    // ═══════════════════════════════════════════════
 
 
 
-// ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════════
     // 🌐 SUPPRESSION DE COMPTE VIA LE SITE WEB (public)
     // ═══════════════════════════════════════════════
 
@@ -163,12 +163,6 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
 
-
-
-
-
-
-
     //store
 
 
@@ -194,13 +188,6 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
 
-
-
-
-
-
-    // SHop categories routes
-    //Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
     Route::post('/shop-categories', [ShopCategoryController::class, 'store']);
 
     // Product images routes
@@ -228,10 +215,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Mettre à jour le statut d'une commande
     Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus']);
 
-
-
-
-
+        // Demande de remboursement (acheteur)
+    Route::post('/orders/{id}/refund', [OrderController::class, 'requestRefund']);
 
 
 

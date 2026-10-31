@@ -361,134 +361,171 @@ class OrderController extends Controller
         // ═══════════════════════════════════════════════════════════
     // 🔄 CHANGEMENT DE STATUT + NOTIFICATION + ESCROW
     // ═══════════════════════════════════════════════════════════
-    public function updateStatus(Request $request, $id)
-    {
-        // On charge les items et les produits pour pouvoir calculer les montants
-        $order = Order::with(['user', 'items.product'])->findOrFail($id);
-
-        $validated = $request->validate([
-            'status' => 'required|in:pending,confirmed,delivered,cancelled,en_attente,confirmee,livree,annulee,expediee',
-        ]);
-
-        $map = [
-            'pending'   => 'pending',
-            'confirmed' => 'confirmed',
-            'delivered' => 'delivered',
-            'cancelled' => 'cancelled',
-            'en_attente' => 'pending',
-            'confirmee'  => 'confirmed',
-            'livree'     => 'delivered',
-            'annulee'    => 'cancelled',
-            'expediee'   => 'shipped',
-        ];
-
-        $newStatus = $map[$validated['status']] ?? $validated['status'];
-        $oldStatus = $order->status;
-
-        if ($oldStatus === $newStatus) {
-            return response()->json([
-                'message' => 'Statut inchangé',
-                'order'   => $order,
-            ]);
-        }
-
-        // ═══════════════════════════════════════════════════════
-        // 🔥 ESCROW : SI ON PASSE À "DELIVERED", ON DÉBLOQUE L'ARGENT
-        // ═══════════════════════════════════════════════════════
-        if ($newStatus === 'delivered' && $oldStatus !== 'delivered') {
-            DB::transaction(function () use ($order) {
-                // On regroupe les items par vendeur
-                $itemsBySeller = $order->items->groupBy('seller_id');
-
-                foreach ($itemsBySeller as $sellerId => $items) {
-                    if (!$sellerId) continue;
-
-                    // Calcul du montant net pour ce vendeur (moins la commission)
-                    $sellerTotal = $items->sum(function ($item) {
-                        return $item->price * $item->quantity;
-                    });
-                    $netAmount = $sellerTotal * 0.90; // 10% de commission
-
-                    // Récupérer le portefeuille du vendeur
-                    $wallet = \App\Models\SellerWallet::firstOrCreate(['seller_id' => $sellerId]);
-
-                    // On enlève du "pending" et on ajoute au "disponible"
-                    if ($wallet->pending_balance >= $netAmount) {
-                        $wallet->decrement('pending_balance', $netAmount);
-                    } else {
-                        // Sécurité : si le pending est inférieur (arrondi), on met à 0
-                        $wallet->update(['pending_balance' => 0]);
-                    }
-                    $wallet->increment('available_balance', $netAmount);
-
-                    // Mettre à jour l'historique des transactions
-                    \App\Models\WalletTransaction::where('order_id', $order->id)
-                        ->where('seller_id', $sellerId)
-                        ->where('status', 'pending')
-                        ->update([
-                            'status' => 'completed',
-                            'description' => 'Vente validée (statut mis à jour)',
-                        ]);
-                }
-            });
-
-            Log::info('💰 Fonds débloqués (Escrow) pour la commande', ['order_id' => $order->id]);
-        }
-        // ═══════════════════════════════════════════════════════
-
-        // Mise à jour du statut
-        $order->status = $newStatus;
-        $order->save();
-
-        // 🔔 Notification FCM selon le nouveau statut
-        try {
-            $fcm = new FcmService();
-
-            switch ($newStatus) {
-                case 'confirmed':
-                    $fcm->notifyOrderConfirmed($order);
-                    break;
-                case 'shipped':
-                    $fcm->notifyOrderShipped($order);
-                    break;
-                case 'delivered':
-                    $fcm->notifyOrderDelivered($order);
-
-                    // ✅ NOUVEAU : Notifier aussi le vendeur que son argent est débloqué
-                    $itemsBySeller = $order->items->groupBy('seller_id');
-                    foreach ($itemsBySeller as $sellerId => $items) {
-                        $seller = User::find($sellerId);
-                        if ($seller) {
-                            $fcm->sendToUser(
-                                $seller,
-                                "Fonds débloqués 💰",
-                                "La livraison de la commande #{$order->id} a été validée. Votre argent est disponible.",
-                                ['type' => 'funds_released', 'order_id' => (string)$order->id]
-                            );
-                        }
-                    }
-                    break;
-                case 'cancelled':
-                    $fcm->notifyOrderCancelled($order);
-                    break;
+        public function updateStatus(Request $request, $id)
+        {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['message' => 'Non authentifié'], 401);
             }
 
-            Log::info('✅ Statut changé + FCM', [
-                'order_id'   => $order->id,
-                'old_status' => $oldStatus,
-                'new_status' => $newStatus,
-            ]);
-        } catch (\Exception $e) {
-            Log::warning('⚠️ Erreur FCM', ['error' => $e->getMessage()]);
-        }
+            // On charge les items et les produits pour pouvoir calculer les montants
+            $order = Order::with(['user', 'items.product'])->findOrFail($id);
 
-        return response()->json([
-            'message' => 'Statut mis à jour',
-            'order'   => $order->fresh(),
-        ]);
-    }
+            // ═══════════════════════════════════════════════════════
+            // 🛡️ VÉRIFICATION DES DROITS (Acheteur vs Vendeur vs Admin)
+            // ═══════════════════════════════════════════════════════
+            $isBuyer = $order->user_id === $user->id;
+            $isAdmin = $user->role === 'admin';
+
+            // Vérifier si l'utilisateur est le vendeur d'au moins un produit de la commande
+            $isSeller = $order->items->contains(function ($item) use ($user) {
+                $seller = User::where('company_id', $item->company_id)->first();
+                return $seller && $seller->id === $user->id;
+            });
+
+            if (!$isBuyer && !$isSeller && !$isAdmin) {
+                return response()->json(['message' => 'Non autorisé à modifier cette commande'], 403);
+            }
+
+            $validated = $request->validate([
+                'status' => 'required|in:pending,confirmed,delivered,cancelled,en_attente,confirmee,livree,annulee,expediee',
+            ]);
+
+            $map = [
+                'pending'   => 'pending',
+                'confirmed' => 'confirmed',
+                'delivered' => 'delivered',
+                'cancelled' => 'cancelled',
+                'en_attente' => 'pending',
+                'confirmee'  => 'confirmed',
+                'livree'     => 'delivered',
+                'annulee'    => 'cancelled',
+                'expediee'   => 'shipped',
+            ];
+
+            $newStatus = $map[$validated['status']] ?? $validated['status'];
+            $oldStatus = $order->status;
+
+            // ═══════════════════════════════════════════════════════
+            // 🚫 RESTRICTION : L'ACHETEUR NE PEUT QUE CONFIRMER LA LIVRAISON
+            // ═══════════════════════════════════════════════════════
+            if ($isBuyer && !$isSeller && !$isAdmin) {
+                if ($newStatus !== 'delivered') {
+                    return response()->json([
+                        'message' => 'En tant qu\'acheteur, vous ne pouvez que confirmer la réception de la commande.'
+                    ], 403);
+                }
+                // Il ne peut confirmer que si le statut actuel est "shipped" (expédiée) ou "confirmed"
+                if (!in_array($oldStatus, ['shipped', 'confirmed', 'expediee', 'confirmee'])) {
+                    return response()->json([
+                        'message' => 'Vous ne pouvez pas confirmer cette commande à ce stade.'
+                    ], 400);
+                }
+            }
+
+            if ($oldStatus === $newStatus) {
+                return response()->json([
+                    'message' => 'Statut inchangé',
+                    'order'   => $order,
+                ]);
+            }
+
+            // ═══════════════════════════════════════════════════════
+            // 🔥 ESCROW : SI ON PASSE À "DELIVERED", ON DÉBLOQUE L'ARGENT
+            // ═══════════════════════════════════════════════════════
+            if ($newStatus === 'delivered' && $oldStatus !== 'delivered') {
+                DB::transaction(function () use ($order) {
+                    // On regroupe les items par vendeur
+                    $itemsBySeller = $order->items->groupBy('seller_id');
+
+                    foreach ($itemsBySeller as $sellerId => $items) {
+                        if (!$sellerId) continue;
+
+                        // Calcul du montant net pour ce vendeur (moins la commission)
+                        $sellerTotal = $items->sum(function ($item) {
+                            return $item->price * $item->quantity;
+                        });
+                        $netAmount = $sellerTotal * 0.90; // 10% de commission
+
+                        // Récupérer le portefeuille du vendeur
+                        $wallet = \App\Models\SellerWallet::firstOrCreate(['seller_id' => $sellerId]);
+
+                        // On enlève du "pending" et on ajoute au "disponible"
+                        if ($wallet->pending_balance >= $netAmount) {
+                            $wallet->decrement('pending_balance', $netAmount);
+                        } else {
+                            // Sécurité : si le pending est inférieur (arrondi), on met à 0
+                            $wallet->update(['pending_balance' => 0]);
+                        }
+                        $wallet->increment('available_balance', $netAmount);
+
+                        // Mettre à jour l'historique des transactions
+                        \App\Models\WalletTransaction::where('order_id', $order->id)
+                            ->where('seller_id', $sellerId)
+                            ->where('status', 'pending')
+                            ->update([
+                                'status' => 'completed',
+                                'description' => 'Vente validée (statut mis à jour)',
+                            ]);
+                    }
+                });
+
+                Log::info('💰 Fonds débloqués (Escrow) pour la commande', ['order_id' => $order->id]);
+            }
+
+            // Mise à jour du statut
+            $order->status = $newStatus;
+            $order->save();
+
+            // 🔔 Notification FCM selon le nouveau statut
+            try {
+                $fcm = new FcmService();
+
+                switch ($newStatus) {
+                    case 'confirmed':
+                        $fcm->notifyOrderConfirmed($order);
+                        break;
+                    case 'shipped':
+                        $fcm->notifyOrderShipped($order);
+                        break;
+                    case 'delivered':
+                        $fcm->notifyOrderDelivered($order);
+
+                        // ✅ Notifier aussi le vendeur que son argent est débloqué
+                        $itemsBySeller = $order->items->groupBy('seller_id');
+                        foreach ($itemsBySeller as $sellerId => $items) {
+                            $seller = User::find($sellerId);
+                            if ($seller) {
+                                $fcm->sendToUser(
+                                    $seller,
+                                    "Fonds débloqués 💰",
+                                    "La livraison de la commande #{$order->id} a été validée. Votre argent est disponible.",
+                                    ['type' => 'funds_released', 'order_id' => (string)$order->id]
+                                );
+                            }
+                        }
+                        break;
+                    case 'cancelled':
+                        $fcm->notifyOrderCancelled($order);
+                        break;
+                }
+
+                Log::info('✅ Statut changé + FCM', [
+                    'order_id'   => $order->id,
+                    'old_status' => $oldStatus,
+                    'new_status' => $newStatus,
+                ]);
+            } catch (\Exception $e) {
+                Log::warning('⚠️ Erreur FCM', ['error' => $e->getMessage()]);
+            }
+
+            return response()->json([
+                'message' => 'Statut mis à jour',
+                'order'   => $order->fresh(),
+            ]);
+        }
     // ═══════════════════════════════════════════════════════════
-    // 📊 STATISTIQUES
+    //  STATISTIQUES
     // ═══════════════════════════════════════════════════════════
     public function getSoldProducts($shopId)
     {
@@ -580,4 +617,75 @@ class OrderController extends Controller
 
         return response()->json(['message' => 'Commande supprimée avec succès']);
     }
+
+        // ═══════════════════════════════════════════════════════════
+    // 💸 DEMANDER UN REMBOURSEMENT (Acheteur)
+    // ═══════════════════════════════════════════════════════════
+    public function requestRefund(Request $request, $id)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Non authentifié'], 401);
+        }
+
+        $order = Order::with(['items.product'])->findOrFail($id);
+
+        // 1. Vérifier que la commande appartient bien à l'utilisateur
+        if ($order->user_id !== $user->id) {
+            return response()->json(['message' => 'Non autorisé'], 403);
+        }
+
+        // 2. Vérifier que le statut permet un remboursement
+        // (Généralement : livrée, annulée, ou en litige)
+        if (!in_array($order->status, ['delivered', 'livree', 'cancelled', 'annulee'])) {
+            return response()->json([
+                'message' => 'Le remboursement n\'est possible que pour les commandes livrées ou annulées.'
+            ], 400);
+        }
+
+        try {
+            // 3. Log de la demande
+            Log::warning('💸 Demande de remboursement reçue', [
+                'order_id' => $order->id,
+                'user_id' => $user->id,
+                'amount' => $order->total,
+                'status' => $order->status,
+            ]);
+
+            // 4. Notifier l'administrateur (FCM)
+            $admin = User::where('role', 'admin')->first();
+            if ($admin) {
+                $fcm = new FcmService();
+                $fcm->sendToUser(
+                    $admin,
+                    "Demande de remboursement 💸",
+                    "L'utilisateur {$user->name} demande un remboursement pour la commande #{$order->id}.",
+                    ['type' => 'refund_request', 'order_id' => (string)$order->id]
+                );
+            }
+
+            // 5. Notifier l'utilisateur que sa demande a été prise en compte
+            $fcm = new FcmService();
+            $fcm->sendToUser(
+                $user,
+                "Demande de remboursement envoyée ✅",
+                "Votre demande pour la commande #{$order->id} est en cours d'examen. L'équipe Masasugu vous contactera.",
+                ['type' => 'refund_pending', 'order_id' => (string)$order->id]
+            );
+
+            // 6. Retourner la réponse de succès
+            return response()->json([
+                'success' => true,
+                'message' => 'Votre demande de remboursement a été envoyée à l\'équipe Masasugu.',
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Erreur demande remboursement', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors du traitement de la demande.',
+            ], 500);
+        }
+    }
+
 }
