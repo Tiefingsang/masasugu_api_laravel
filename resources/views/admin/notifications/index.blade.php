@@ -112,6 +112,14 @@
                           class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-orange-500"></textarea>
             </div>
 
+            {{-- ✅ URL APK (uniquement si type = update) --}}
+            <div id="apk-url-group" class="hidden mb-4">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Lien de l'APK (pour la mise à jour)</label>
+                <input type="url" name="apk_url" placeholder="https://github.com/.../app-release.apk"
+                    class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-orange-500">
+                <p class="text-xs text-gray-500 mt-1">Laissez vide pour utiliser la dernière release GitHub par défaut.</p>
+            </div>
+
             <button type="submit"
                     class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-lg"
                     onclick="return confirm('Envoyer cette notification ?')">
@@ -153,17 +161,6 @@
                 <input type="text" name="message" value="Ceci est un test de notification" maxlength="500"
                        class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-orange-500">
             </div>
-            <!-- ... (avant le bouton submit) ... -->
-
-            {{-- URL APK (uniquement si type = update) --}}
-            <div id="apk-url-group" class="hidden mb-4">
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Lien de l'APK (pour la mise à jour)</label>
-                <input type="url" name="apk_url" placeholder="https://github.com/.../app-release.apk"
-                    class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-orange-500">
-                <p class="text-xs text-gray-500 mt-1">Laissez vide pour utiliser la dernière release GitHub par défaut.</p>
-            </div>
-
-
 
             <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg">
                 <i class="fas fa-paper-plane"></i> Envoyer le test
@@ -189,16 +186,19 @@
     </div>
 </div>
 
-
-
 <script>
-    document.querySelector('select[name="type"]').addEventListener('change', function() {
+    // Afficher/Masquer le champ APK selon le type sélectionné
+    document.addEventListener('DOMContentLoaded', function() {
+        const typeSelect = document.querySelector('select[name="type"]');
         const apkGroup = document.getElementById('apk-url-group');
-        if (this.value === 'update') {
-            apkGroup.classList.remove('hidden');
-        } else {
-            apkGroup.classList.add('hidden');
-        }
+
+        typeSelect.addEventListener('change', function() {
+            if (this.value === 'update') {
+                apkGroup.classList.remove('hidden');
+            } else {
+                apkGroup.classList.add('hidden');
+            }
+        });
     });
 </script>
 
