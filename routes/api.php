@@ -13,6 +13,8 @@ use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\AccountDeletionController;
 use App\Http\Controllers\Api\ProductRatingController;
+use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\PayoutController;
 use Illuminate\Http\Request;
 
 
